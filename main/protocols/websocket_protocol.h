@@ -27,10 +27,12 @@ private:
     WebSocket* websocket_ = nullptr;
     EventGroupHandle_t event_group_handle_;
     std::string message_cache_;
+    bool is_first_packet_ = true;
    
 
     void ParseServerHello(const cJSON* root);
     bool SendText(const std::string& text) override;
+    void SendOggData(const std::vector<uint8_t>& ogg_data);
 };
 
 #endif

@@ -419,13 +419,15 @@ void Application::Start() {
         return;
     }
 
+    // protocol_->UpdateRoomParams("","","","");
+
     // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {
         SetDeviceState(kDeviceStateIdle);
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
     });
     protocol_->OnIncomingAudio([this](std::vector<uint8_t>&& data) {
-        const int max_packets_in_queue = 300 / OPUS_FRAME_DURATION_MS;
+        const int max_packets_in_queue = 1000 / OPUS_FRAME_DURATION_MS;
         std::lock_guard<std::mutex> lock(mutex_);
         if (audio_decode_queue_.size() < max_packets_in_queue) {
             audio_decode_queue_.emplace_back(std::move(data));

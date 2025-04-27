@@ -1,11 +1,11 @@
 #include "auth.h"
 
 std::string Auth::getAuthKey() {
-    return CONFIG_AUTH_KEY;
+    return "0e13741451bf42dca84fa22a47f355ef";
 }
 
 std::string Auth::getDeviceId() {
-    return CONFIG_DEVICE_ID;
+    return "n64901bb";
 }
 
 std::string Auth::getProductKey() {

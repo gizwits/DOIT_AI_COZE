@@ -113,14 +113,8 @@ Http* WifiBoard::CreateHttp() {
 }
 
 WebSocket* WifiBoard::CreateWebSocket() {
-    Settings settings("websocket", false);
-    std::string url = settings.GetString("url");
-    if (url.find("wss://") == 0) {
-        return new WebSocket(new TlsTransport());
-    } else {
-        return new WebSocket(new TcpTransport());
-    }
-    return nullptr;
+    // 暂时不支持 s
+    return new WebSocket(new TcpTransport());
 }
 
 Mqtt* WifiBoard::CreateMqtt() {
