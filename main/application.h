@@ -17,6 +17,7 @@
 #include <opus_resampler.h>
 
 #include "protocol.h"
+#include "server/giz_mqtt.h"
 #include "ota.h"
 #include "background_task.h"
 
@@ -92,6 +93,7 @@ private:
     esp_timer_handle_t clock_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
+    std::unique_ptr<MqttClient> mqtt_client_;
 #if CONFIG_USE_REALTIME_CHAT
     bool realtime_chat_enabled_ = true;
     bool realtime_chat_is_start_ = false;

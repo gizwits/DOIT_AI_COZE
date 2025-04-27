@@ -23,7 +23,7 @@ std::string Ml307Board::GetBoardType() {
     return "ml307";
 }
 
-void Ml307Board::StartNetwork() {
+bool Ml307Board::StartNetwork() {
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(Lang::Strings::DETECTING_MODULE);
     modem_.SetDebug(false);
@@ -40,6 +40,7 @@ void Ml307Board::StartNetwork() {
     });
 
     WaitForNetworkReady();
+    return true;
 }
 
 void Ml307Board::WaitForNetworkReady() {

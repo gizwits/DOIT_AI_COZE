@@ -43,7 +43,7 @@ public:
     virtual WebSocket* CreateWebSocket() = 0;
     virtual Mqtt* CreateMqtt() = 0;
     virtual Udp* CreateUdp() = 0;
-    virtual void StartNetwork() = 0;
+    virtual bool StartNetwork() = 0;
     virtual const char* GetNetworkStateIcon() = 0;
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging);
     virtual std::string GetJson();

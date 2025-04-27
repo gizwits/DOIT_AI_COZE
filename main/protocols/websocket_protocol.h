@@ -1,9 +1,8 @@
 #ifndef _WEBSOCKET_PROTOCOL_H_
 #define _WEBSOCKET_PROTOCOL_H_
 
-
 #include "protocol.h"
-
+#include "esp_heap_caps.h"
 #include <web_socket.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
@@ -13,17 +12,22 @@
 class WebsocketProtocol : public Protocol {
 public:
     WebsocketProtocol();
-    ~WebsocketProtocol();
 
-    bool Start() override;
-    void SendAudio(const std::vector<uint8_t>& data) override;
-    bool OpenAudioChannel() override;
-    void CloseAudioChannel() override;
-    bool IsAudioChannelOpened() const override;
+    virtual ~WebsocketProtocol();
+
+    virtual bool Start() override;
+    virtual bool OpenAudioChannel() override;
+    virtual void SendStopListening() override;
+    virtual void CloseAudioChannel() override;
+    virtual bool IsAudioChannelOpened() const override;
+    virtual void SendAudio(const std::vector<int16_t>& data) override;
+    virtual void SendAudio(const std::vector<uint8_t>& data) override;
 
 private:
-    EventGroupHandle_t event_group_handle_;
     WebSocket* websocket_ = nullptr;
+    EventGroupHandle_t event_group_handle_;
+    std::string message_cache_;
+   
 
     void ParseServerHello(const cJSON* root);
     bool SendText(const std::string& text) override;

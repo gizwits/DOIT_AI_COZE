@@ -13,7 +13,7 @@ protected:
 
 public:
     virtual std::string GetBoardType() override;
-    virtual void StartNetwork() override;
+    virtual bool StartNetwork() override;
     virtual Http* CreateHttp() override;
     virtual WebSocket* CreateWebSocket() override;
     virtual Mqtt* CreateMqtt() override;

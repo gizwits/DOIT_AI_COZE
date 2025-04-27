@@ -7,14 +7,16 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "led/single_led.cc"
             "led/circular_strip.cc"
             "led/gpio_led.cc"
-            "display/display.cc"
-            "display/lcd_display.cc"
-            "display/oled_display.cc"
             "protocols/protocol.cc"
             "protocols/mqtt_protocol.cc"
             "protocols/websocket_protocol.cc"
             "iot/thing.cc"
             "iot/thing_manager.cc"
+            "server/giz_mqtt.cc"
+            "server/giz_api.cc"
+            "server/protocol/iot_protocol.cc"
+            "protocols/mcp.cc"
+            "auth.cc"
             "system_info.cc"
             "application.cc"
             "ota.cc"
@@ -23,7 +25,12 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "audio_codecs" "protocols" "audio_processing")
+set(INCLUDE_DIRS "." "audio_codecs" "protocols" "audio_processing" "display")
+
+# 如果不是 ESP32C2，则添加显示相关目录
+if(NOT CONFIG_IDF_TARGET_ESP32C2)
+    list(APPEND INCLUDE_DIRS "display")
+endif()
 
 # 添加 IOT 相关文件
 file(GLOB IOT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/iot/things/*.cc)
@@ -198,6 +205,7 @@ endif()
 idf_component_register(SRCS ${SOURCES}
                     EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
+                    PRIV_REQUIRES ${PRIV_REQUIRES}
                     WHOLE_ARCHIVE
                     )
 

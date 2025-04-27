@@ -4,11 +4,11 @@
 #include "system_info.h"
 #include "ml307_ssl_transport.h"
 #include "audio_codec.h"
-#include "mqtt_protocol.h"
 #include "websocket_protocol.h"
 #include "font_awesome_symbols.h"
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
+#include "server/giz_mqtt.h"
 
 #include <cstring>
 #include <esp_log.h>
@@ -40,7 +40,7 @@ Application::Application() {
     event_group_ = xEventGroupCreate();
 #if (defined(CONFIG_IDF_TARGET_ESP32C2) || defined(CONFIG_IDF_TARGET_ESP32C3))
 #if (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS) && defined(CONFIG_USE_AUDIO_CODEC_DECODE_OPUS))
-    background_task_ = new BackgroundTask(2048);
+    background_task_ = new BackgroundTask(4096);
 #elif (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS))
     background_task_ = new BackgroundTask(4096 * 2 + 768);
     // background_task_ = new BackgroundTask(4096 * 2 + 512);
@@ -92,11 +92,6 @@ void Application::CheckNewVersion() {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
                 return;
             }
-
-            char buffer[128];
-            snprintf(buffer, sizeof(buffer), Lang::Strings::CHECK_NEW_VERSION_FAILED, retry_delay, ota_.GetCheckVersionUrl().c_str());
-            Alert(Lang::Strings::ERROR, buffer, "sad", Lang::Sounds::P3_EXCLAMATION);
-
             ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", retry_delay, retry_count, MAX_RETRY);
             for (int i = 0; i < retry_delay; i++) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
@@ -389,34 +384,42 @@ void Application::Start() {
         app->AudioLoop();
         vTaskDelete(NULL);
 #ifdef CONFIG_IDF_TARGET_ESP32C2
-    }, "audio_loop", 2048, this, 8, &audio_loop_task_handle_, 0);
-    // }, "audio_loop", 1024, this, 8, &audio_loop_task_handle_, 0);
+    }, "audio_loop", 4096, this, 8, &audio_loop_task_handle_, 0);
 #else
 #ifdef CONFIG_IDF_TARGET_ESP32C3
-    }, "audio_loop", 4096 * 2, this, 8, &audio_loop_task_handle_, 0);
+    }, "audio_loop", 4096 * 4, this, 8, &audio_loop_task_handle_, 0);
 #else
-    }, "audio_loop", 4096 * 2, this, 8, &audio_loop_task_handle_, realtime_chat_enabled_ ? 1 : 0);
+    }, "audio_loop", 4096 * 4, this, 8, &audio_loop_task_handle_, realtime_chat_enabled_ ? 1 : 0);
 #endif
 #endif
 
     /* Wait for the network to be ready */
-    board.StartNetwork();
+    bool has_wifi_config = board.StartNetwork();
+    if (!has_wifi_config) {
+        // 进入配网模式
+        ESP_LOGI(TAG, "Network configuration required");
+        return;
+    }
 
     // Check for new firmware version or get the MQTT broker address
     CheckNewVersion();
 
-    // Initialize the protocol
-    display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
+    // Initialize MQTT client
+    protocol_ = std::make_unique<WebsocketProtocol>();
 
-    if (ota_.HasMqttConfig()) {
-        protocol_ = std::make_unique<MqttProtocol>();
-    } else if (ota_.HasWebsocketConfig()) {
-        protocol_ = std::make_unique<WebsocketProtocol>();
-    } else {
-        ESP_LOGW(TAG, "No protocol specified in the OTA config, using MQTT");
-        protocol_ = std::make_unique<MqttProtocol>();
+    display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
+    mqtt_client_ = std::make_unique<MqttClient>();
+    mqtt_client_->OnRoomParamsUpdated([this](const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token) {
+        protocol_->UpdateRoomParams(bot_id, voice_id, conv_id, access_token);
+    });
+
+    if (!mqtt_client_->initialize()) {
+        ESP_LOGE(TAG, "Failed to initialize MQTT client");
+        Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
+        return;
     }
 
+    // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {
         SetDeviceState(kDeviceStateIdle);
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
@@ -435,12 +438,17 @@ void Application::Start() {
                 protocol_->server_sample_rate(), codec->output_sample_rate());
         }
         SetDecodeSampleRate(protocol_->server_sample_rate(), protocol_->server_frame_duration());
-        auto& thing_manager = iot::ThingManager::GetInstance();
-        protocol_->SendIotDescriptors(thing_manager.GetDescriptorsJson());
-        std::string states;
-        if (thing_manager.GetStatesJson(states, false)) {
-            protocol_->SendIotStates(states);
-        }
+
+        /**
+        Coze 没有办法从设备推上去支持什么 MCP
+        暂时不实现
+         */
+        // auto& thing_manager = iot::ThingManager::GetInstance();
+        // protocol_->SendIotDescriptors(thing_manager.GetDescriptorsJson());
+        // std::string states;
+        // if (thing_manager.GetStatesJson(states, false)) {
+        //     protocol_->SendIotStates(states);
+        // }
     });
     protocol_->OnAudioChannelClosed([this, &board]() {
         board.SetPowerSaveMode(true);
@@ -497,16 +505,8 @@ void Application::Start() {
                     display->SetEmotion(emotion_str.c_str());
                 });
             }
-        } else if (strcmp(type->valuestring, "iot") == 0) {
-            auto commands = cJSON_GetObjectItem(root, "commands");
-            if (commands != NULL) {
-                auto& thing_manager = iot::ThingManager::GetInstance();
-                for (int i = 0; i < cJSON_GetArraySize(commands); ++i) {
-                    auto command = cJSON_GetArrayItem(commands, i);
-                    thing_manager.Invoke(command);
-                }
-            }
-        } else if (strcmp(type->valuestring, "system") == 0) {
+        } 
+        else if (strcmp(type->valuestring, "system") == 0) {
             auto command = cJSON_GetObjectItem(root, "command");
             if (command != NULL) {
                 ESP_LOGI(TAG, "System command: %s", command->valuestring);
@@ -539,11 +539,7 @@ void Application::Start() {
             if (protocol_->IsAudioChannelBusy()) {
                 return;
             }
-            opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
-                Schedule([this, opus = std::move(opus)]() {
-                    protocol_->SendAudio(opus);
-                });
-            });
+            protocol_->SendAudio(data);
         });
     });
     audio_processor_.OnVadStateChange([this](bool speaking) {
@@ -585,6 +581,9 @@ void Application::Start() {
                 SetListeningMode(realtime_chat_enabled_ ? kListeningModeRealtime : kListeningModeAutoStop);
             } else if (device_state_ == kDeviceStateSpeaking) {
                 AbortSpeaking(kAbortReasonWakeWordDetected);
+                SetListeningMode(realtime_chat_enabled_ ? kListeningModeRealtime : kListeningModeAutoStop);
+                auto display = Board::GetInstance().GetDisplay();
+                display->SetChatMessage("assistant", "");
             } else if (device_state_ == kDeviceStateActivating) {
                 SetDeviceState(kDeviceStateIdle);
             }
@@ -778,9 +777,7 @@ void Application::OnAudioInput() {
         std::vector<uint8_t> opus;
         if (!protocol_->IsAudioChannelBusy()) {
             ReadAudio(opus, 16000, 30 * 16000 / 1000);
-            Schedule([this, opus = std::move(opus)]() {
-                protocol_->SendAudio(opus);
-            });
+            protocol_->SendAudio(opus);
         }
 #else
         std::vector<int16_t> data;
@@ -789,11 +786,8 @@ void Application::OnAudioInput() {
             if (protocol_->IsAudioChannelBusy()) {
                 return;
             }
-            opus_encoder_->Encode(std::move(data), [this](std::vector<uint8_t>&& opus) {
-                Schedule([this, opus = std::move(opus)]() {
-                    protocol_->SendAudio(opus);
-                });
-            });
+            protocol_->SendAudio(data);
+
         });
 #endif
         return;

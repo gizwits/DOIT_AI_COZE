@@ -208,6 +208,54 @@ choice DISPLAY_ESP32S3_KORVO2_V3
         bool "ILI9341, 分辨率240*320"
 endchoice
 
+
+config COZE_WEBSOCKET_URL
+    string "Coze Websocket URL"
+    default "ws://ws.coze.cn/v1/chat"
+    help
+        Communication with the Coze server through websocket after wake up.
+        
+config PRODUCT_KEY
+    string "Product Key"
+    default "0971c20fda8344c3aeef39fda9438284"
+    help
+        Product key for Gizwits.
+        
+config PRODUCT_SECRET
+    string "Product Secret"
+    default "e3c65ae1c1bb42bc831285a3d7de3421"
+    help
+        Product secret for Gizwits.
+
+config DEVICE_ID
+    string "Device ID"
+    default ""
+    help
+        Device ID for Gizwits.
+
+config AUTH_KEY
+    string "Auth Key"
+    default ""
+    help
+        Auth key for Gizwits.
+
+choice CONNECTION_TYPE
+    prompt "WiFi Connection Type"
+    default CONNECTION_TYPE_BLE
+    help
+        Select the WiFi connection type
+
+    config CONNECTION_TYPE_BLE
+        bool "WiFi with BLE"
+        help
+            Connect to WiFi using BLE provisioning
+
+    config CONNECTION_TYPE_AP
+        bool "WiFi with AP"
+        help
+            Connect to WiFi using Access Point mode
+endchoice
+
 config USE_WECHAT_MESSAGE_STYLE
     bool "使用微信聊天界面风格"
     default n

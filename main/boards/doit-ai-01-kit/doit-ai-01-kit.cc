@@ -19,9 +19,15 @@ private:
     VbAduioCodec audio_codec;
 
     void InitializeButtons() {
-        boot_button_.OnClick([this]() {
-            auto &app = Application::GetInstance();
-            app.ToggleChatState();
+        // boot_button_.OnClick([this]() {
+        //     auto &app = Application::GetInstance();
+        //     app.ToggleChatState();
+        // });
+        boot_button_.OnPressDown([this]() {
+            Application::GetInstance().StartListening();
+        });
+        boot_button_.OnPressUp([this]() {
+            Application::GetInstance().StopListening();
         });
         boot_button_.OnPressRepeat([this](uint16_t count) {
             if(count >= 3){

@@ -3,6 +3,7 @@
 #include <esp_log.h>
 
 #define TAG "Protocol"
+#include <esp_random.h>
 
 void Protocol::OnIncomingJson(std::function<void(const cJSON* root)> callback) {
     on_incoming_json_ = callback;
@@ -32,18 +33,20 @@ void Protocol::SetError(const std::string& message) {
 }
 
 void Protocol::SendAbortSpeaking(AbortReason reason) {
-    std::string message = "{\"session_id\":\"" + session_id_ + "\",\"type\":\"abort\"";
-    if (reason == kAbortReasonWakeWordDetected) {
-        message += ",\"reason\":\"wake_word_detected\"";
-    }
-    message += "}";
+
+    char event_id[32];
+    uint32_t random_value = esp_random();
+    snprintf(event_id, sizeof(event_id), "%lu", random_value);
+    
+    std::string message = "{\"id\":\"" + std::string(event_id) + "\",\"event_type\":\"conversation.chat.cancel\"}";
+
     SendText(message);
 }
 
 void Protocol::SendWakeWordDetected(const std::string& wake_word) {
-    std::string json = "{\"session_id\":\"" + session_id_ + 
-                      "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
-    SendText(json);
+    // std::string json = "{\"session_id\":\"" + session_id_ + 
+    //                   "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
+    // SendText(json);
 }
 
 void Protocol::SendStartListening(ListeningMode mode) {
@@ -130,3 +133,17 @@ bool Protocol::IsAudioChannelBusy() const {
     return busy_sending_audio_;
 }
 
+
+void Protocol::UpdateRoomParams(const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token) {
+    ESP_LOGI(TAG, "Updating WebSocket parameters:");
+    ESP_LOGI(TAG, "  bot_id: %s", bot_id.c_str());
+    ESP_LOGI(TAG, "  voice_id: %s", voice_id.c_str());
+    ESP_LOGI(TAG, "  conv_id: %s", conv_id.c_str());
+    ESP_LOGI(TAG, "  access_token: %s", access_token.c_str());
+
+    // 保存
+    conversation_id_ = conv_id;
+    access_token_ = access_token;
+    bot_id_ = bot_id;
+    voice_id_ = voice_id;
+}

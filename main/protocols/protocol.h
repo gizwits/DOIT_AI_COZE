@@ -48,6 +48,7 @@ public:
     virtual bool OpenAudioChannel() = 0;
     virtual void CloseAudioChannel() = 0;
     virtual bool IsAudioChannelOpened() const = 0;
+    virtual void SendAudio(const std::vector<int16_t>& data) = 0;
     virtual bool IsAudioChannelBusy() const;
     virtual void SendAudio(const std::vector<uint8_t>& data) = 0;
     virtual void SendWakeWordDetected(const std::string& wake_word);
@@ -56,6 +57,8 @@ public:
     virtual void SendAbortSpeaking(AbortReason reason);
     virtual void SendIotDescriptors(const std::string& descriptors);
     virtual void SendIotStates(const std::string& states);
+    virtual void UpdateRoomParams(const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token);
+
 
 protected:
     std::function<void(const cJSON* root)> on_incoming_json_;
@@ -63,6 +66,11 @@ protected:
     std::function<void()> on_audio_channel_opened_;
     std::function<void()> on_audio_channel_closed_;
     std::function<void(const std::string& message)> on_network_error_;
+
+    std::string conversation_id_;
+    std::string access_token_;
+    std::string bot_id_;
+    std::string voice_id_;
 
     int server_sample_rate_ = 24000;
     int server_frame_duration_ = 60;
