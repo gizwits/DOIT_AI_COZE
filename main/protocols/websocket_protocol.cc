@@ -50,18 +50,22 @@ void WebsocketProtocol::SendAudio(const std::vector<uint8_t>& data) {
 
     // Calculate total size needed
     const size_t ogg_header_size = sizeof(OggPageHeader);
-    const size_t total_size = ogg_header_size + data.size();
+    const size_t length_header_size = 2;  // 2 bytes for length
+    const size_t opus_data_size = length_header_size + data.size();
+    const size_t total_size = ogg_header_size + opus_data_size;
     
     // Allocate buffer for Ogg container
     std::vector<uint8_t> ogg_data(total_size);
     
     // Copy Ogg header
     OggPageHeader header;
-    header.segment_table[0] = static_cast<uint8_t>(data.size());
+    header.segment_table[0] = static_cast<uint8_t>(opus_data_size);  // Segment size is the size of [length][Opus data]
     memcpy(ogg_data.data(), &header, ogg_header_size);
     
-    // Copy Opus data
-    memcpy(ogg_data.data() + ogg_header_size, data.data(), data.size());
+    // Add length header and Opus data
+    uint16_t data_length = static_cast<uint16_t>(data.size());
+    memcpy(ogg_data.data() + ogg_header_size, &data_length, length_header_size);
+    memcpy(ogg_data.data() + ogg_header_size + length_header_size, data.data(), data.size());
 
     // Convert to base64
     size_t out_len = 4 * ((total_size + 2) / 3);
@@ -325,6 +329,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {
                 ESP_LOGE(TAG, "Error: %s", str_data.data());
+            } else {
+                ESP_LOGI(TAG, "Unknown event type: %s", event_type.data());
             }
         }
         last_incoming_time_ = std::chrono::steady_clock::now();

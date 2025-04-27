@@ -23,6 +23,9 @@ private:
         //     auto &app = Application::GetInstance();
         //     app.ToggleChatState();
         // });
+        // boot_button_.OnLongPress([this]() {
+        //     esp_restart();
+        // });
         boot_button_.OnPressDown([this]() {
             Application::GetInstance().StartListening();
         });

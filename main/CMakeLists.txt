@@ -10,6 +10,9 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "protocols/protocol.cc"
             "protocols/mqtt_protocol.cc"
             "protocols/websocket_protocol.cc"
+            "display/display.cc"
+            "display/lcd_display.cc"
+            "display/oled_display.cc"
             "iot/thing.cc"
             "iot/thing_manager.cc"
             "server/giz_mqtt.cc"
@@ -26,11 +29,6 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             )
 
 set(INCLUDE_DIRS "." "audio_codecs" "protocols" "audio_processing" "display")
-
-# 如果不是 ESP32C2，则添加显示相关目录
-if(NOT CONFIG_IDF_TARGET_ESP32C2)
-    list(APPEND INCLUDE_DIRS "display")
-endif()
 
 # 添加 IOT 相关文件
 file(GLOB IOT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/iot/things/*.cc)
