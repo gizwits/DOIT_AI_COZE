@@ -314,7 +314,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     }
 
     error_occurred_ = false;
-    std::string url = std::string("?ws://") + api_domain_ + std::string("?bot_id=") + std::string(bot_id_);
+    std::string url = std::string("ws://") + api_domain_ + std::string("/v1/chat") + std::string("?bot_id=") + std::string(bot_id_);
     std::string token = "Bearer " + std::string(access_token_);
 
     message_cache_ = "";

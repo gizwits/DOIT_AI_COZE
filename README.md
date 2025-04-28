@@ -80,6 +80,10 @@
 - IDF下载    
     3. idf.py flash   
 
+## 授权
+1. 先获取设备的 mac 地址
+2. 把 mac 地址发送给我们，我们会返回 did 和 token 两个参数，粘贴到 auth.cc 的 getDeviceId 和 getAuthKey
+
 ## 硬件部分
 
 ![模组实物](docs/模组实物图.png)

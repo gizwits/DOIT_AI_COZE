@@ -424,6 +424,9 @@ int32_t GServer::getWebsocketConfig(std::function<void(websocket_config_t*)> cal
         }
     }
 
+    // 打印config json
+    ESP_LOGI(TAG, "Websocket config: %s", cJSON_Print(root));
+
     cJSON_Delete(root);
 
     if (callback) {
