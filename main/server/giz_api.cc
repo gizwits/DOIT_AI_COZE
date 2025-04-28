@@ -10,6 +10,7 @@
 #include "mbedtls/sha256.h"
 #include "auth.h"
 #include "settings.h"
+#include "cJSON.h"
 
 #define TAG "GServer"
 
@@ -336,4 +337,99 @@ char* GServer::get_trace_id() {
     }
     trace_id[32] = '\0';
     return trace_id;
+}
+
+int32_t GServer::getWebsocketConfig(std::function<void(websocket_config_t*)> callback) {
+    std::string did = Auth::getDeviceId();
+    std::string url = "http://agent.gizwitsapi.com/v3/devices/" + did + "/agent/websocket";
+    ESP_LOGI(TAG, "Websocket config URL: %s", url.c_str());
+
+    // 使用Board的HTTP客户端
+    auto& board = Board::GetInstance();
+    auto http = board.CreateHttp();
+    
+    
+    // 创建token
+    static uint8_t szNonce[PASSCODE_LEN + 1];
+    gatCreatNewPassCode(PASSCODE_LEN, szNonce);
+    const char *token = gatCreateToken(szNonce);
+
+    // 设置请求头
+    http->SetHeader("X-Sign-Method", "sha256");
+    http->SetHeader("X-Sign-Nonce", (const char*)szNonce);
+    http->SetHeader("X-Sign-Token", token);
+    http->SetHeader("X-Trace-Id", get_trace_id());
+
+    ESP_LOGI(TAG, "Websocket config token: %s", token);
+    ESP_LOGI(TAG, "Websocket config nonce: %s", (const char*)szNonce);
+    // 发送GET请求
+    if (!http->Open("GET", url)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        delete http;
+        return -1;
+    }
+
+    std::string response = http->GetBody();
+    delete http;
+
+    // 解析JSON响应
+    ESP_LOGI(TAG, "Websocket config response: %s", response.c_str());
+    cJSON *root = cJSON_Parse(response.c_str());
+    if (!root) {
+        ESP_LOGE(TAG, "Failed to parse JSON response");
+        return -1;
+    }
+
+    websocket_config_t* config = new websocket_config_t();
+    memset(config, 0, sizeof(websocket_config_t));
+    
+    // 解析顶层字段
+    cJSON *data = cJSON_GetObjectItem(root, "data");
+    if (data) {
+        config->platform_type = cJSON_GetObjectItem(data, "platform_type")->valueint;
+        config->token_quota = cJSON_GetObjectItem(data, "token_quota")->valueint;
+        
+        // 解析coze_websocket对象
+        cJSON *coze_ws = cJSON_GetObjectItem(data, "coze_websocket");
+        if (coze_ws) {
+            strncpy(config->coze_websocket.api_domain, 
+                   cJSON_GetObjectItem(coze_ws, "api_domain")->valuestring,
+                   sizeof(config->coze_websocket.api_domain) - 1);
+            
+            strncpy(config->coze_websocket.access_token,
+                   cJSON_GetObjectItem(coze_ws, "access_token")->valuestring,
+                   sizeof(config->coze_websocket.access_token) - 1);
+            
+            config->coze_websocket.expires_in = cJSON_GetObjectItem(coze_ws, "expires_in")->valueint;
+            
+            strncpy(config->coze_websocket.bot_id,
+                   cJSON_GetObjectItem(coze_ws, "bot_id")->valuestring,
+                   sizeof(config->coze_websocket.bot_id) - 1);
+            
+            strncpy(config->coze_websocket.voice_id,
+                   cJSON_GetObjectItem(coze_ws, "voice_id")->valuestring,
+                   sizeof(config->coze_websocket.voice_id) - 1);
+            
+            strncpy(config->coze_websocket.voice_lang,
+                   cJSON_GetObjectItem(coze_ws, "voice_lang")->valuestring,
+                   sizeof(config->coze_websocket.voice_lang) - 1);
+            
+            strncpy(config->coze_websocket.user_id,
+                   cJSON_GetObjectItem(coze_ws, "user_id")->valuestring,
+                   sizeof(config->coze_websocket.user_id) - 1);
+            
+            strncpy(config->coze_websocket.conv_id,
+                   cJSON_GetObjectItem(coze_ws, "conv_id")->valuestring,
+                   sizeof(config->coze_websocket.conv_id) - 1);
+        }
+    }
+
+    cJSON_Delete(root);
+
+    if (callback) {
+        callback(config);
+    }
+
+    delete config;
+    return 0;
 } 

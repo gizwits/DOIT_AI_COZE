@@ -27,6 +27,23 @@ struct mqtt_config_t {
     char mqtt_port[8];
 };
 
+struct coze_websocket_t {
+    char api_domain[64];
+    char access_token[128];
+    int expires_in;
+    char bot_id[32];
+    char voice_id[32];
+    char voice_lang[16];
+    char user_id[32];
+    char conv_id[32];
+};
+
+struct websocket_config_t {
+    int platform_type;
+    int token_quota;
+    coze_websocket_t coze_websocket;
+};
+
 struct onboarding_response_t {
     bool success;
     std::string message;
@@ -68,6 +85,8 @@ public:
     
     // 执行Onboarding
     static int32_t activationDevice(std::function<void(mqtt_config_t*)> callback);
+
+    static int32_t getWebsocketConfig(std::function<void(websocket_config_t*)> callback);
 
 private:
     // 16进制转字符串

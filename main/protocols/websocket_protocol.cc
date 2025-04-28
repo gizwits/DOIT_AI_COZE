@@ -314,7 +314,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     }
 
     error_occurred_ = false;
-    std::string url = CONFIG_COZE_WEBSOCKET_URL + std::string("?bot_id=") + std::string(bot_id_);
+    std::string url = std::string("?ws://") + api_domain_ + std::string("?bot_id=") + std::string(bot_id_);
     std::string token = "Bearer " + std::string(access_token_);
 
     message_cache_ = "";
@@ -555,7 +555,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     message += "\"frame_size_ms\":60,";
     message += "\"limit_config\":{";
     message += "\"period\":1,";
-    message += "\"max_frame_num\":20";
+    message += "\"max_frame_num\":17";
     message += "}";
     message += "},";
     message += "\"speech_rate\":0,";

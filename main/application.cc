@@ -9,6 +9,7 @@
 #include "iot/thing_manager.h"
 #include "assets/lang_config.h"
 #include "server/giz_mqtt.h"
+#include "settings.h"
 
 #include <cstring>
 #include <esp_log.h>
@@ -395,11 +396,6 @@ void Application::Start() {
 
     /* Wait for the network to be ready */
     bool has_wifi_config = board.StartNetwork();
-    if (!has_wifi_config) {
-        // 进入配网模式
-        ESP_LOGI(TAG, "Network configuration required");
-        return;
-    }
 
     // Check for new firmware version or get the MQTT broker address
     CheckNewVersion();
@@ -408,18 +404,61 @@ void Application::Start() {
     protocol_ = std::make_unique<WebsocketProtocol>();
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
-    mqtt_client_ = std::make_unique<MqttClient>();
-    mqtt_client_->OnRoomParamsUpdated([this](const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token) {
-        protocol_->UpdateRoomParams(bot_id, voice_id, conv_id, access_token);
-    });
+    // mqtt_client_ = std::make_unique<MqttClient>();
+    // mqtt_client_->OnRoomParamsUpdated([this](const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token) {
+    //     protocol_->UpdateRoomParams(bot_id, voice_id, conv_id, access_token);
+    // });
 
-    if (!mqtt_client_->initialize()) {
-        ESP_LOGE(TAG, "Failed to initialize MQTT client");
-        Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
+    // if (!mqtt_client_->initialize()) {
+    //     ESP_LOGE(TAG, "Failed to initialize MQTT client");
+    //     Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
+    //     return;
+    // }
+
+    /**
+    先 provision 获取相关信息
+     */
+    Settings settings("wifi", true);
+    bool need_activation = settings.GetInt("need_activation");
+    // 创建信号量用于等待回调完成
+    SemaphoreHandle_t config_sem = xSemaphoreCreateBinary();
+    if (config_sem == nullptr) {
+        ESP_LOGE(TAG, "Failed to create semaphore");
         return;
     }
 
-    // protocol_->UpdateRoomParams("","","","");
+    if (need_activation == 1) {
+        ESP_LOGI(TAG, "need_activation is true");
+        // 调用注册
+        GServer::activationDevice([this, config_sem, &settings](mqtt_config_t* config) {
+            xSemaphoreGive(config_sem);
+            settings.SetInt("need_activation", 0);
+        });
+    } else {
+        ESP_LOGI(TAG, "need_activation is false");
+        // 调用Provision 获取相关信息
+        GServer::getProvision([this, config_sem](mqtt_config_t* config) {
+            xSemaphoreGive(config_sem);
+        });
+    }
+    // 等待回调完成，超时时间设为10秒
+    if (xSemaphoreTake(config_sem, pdMS_TO_TICKS(10000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Timeout waiting for MQTT config");
+        vSemaphoreDelete(config_sem);
+        return;
+    }
+    vSemaphoreDelete(config_sem);
+    /**
+    先 provision 获取相关信息
+     */
+
+    GServer::getWebsocketConfig([this](websocket_config_t* config) {
+        ESP_LOGI(TAG, "Websocket config: %s", config->coze_websocket.api_domain);
+        if (config) {
+            protocol_->UpdateRoomParams(config);
+        }
+    });
+
 
     // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {
@@ -431,6 +470,9 @@ void Application::Start() {
         std::lock_guard<std::mutex> lock(mutex_);
         if (audio_decode_queue_.size() < max_packets_in_queue) {
             audio_decode_queue_.emplace_back(std::move(data));
+        } else {
+            ESP_LOGW("AUDIO", "Audio decode queue is full! Current size: %d, Max size: %d", 
+                    audio_decode_queue_.size(), max_packets_in_queue);
         }
     });
     protocol_->OnAudioChannelOpened([this, codec, &board]() {

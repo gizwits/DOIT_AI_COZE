@@ -5,6 +5,7 @@
 #include <string>
 #include <functional>
 #include <chrono>
+#include "server/giz_api.h"
 
 struct BinaryProtocol3 {
     uint8_t type;
@@ -57,7 +58,7 @@ public:
     virtual void SendAbortSpeaking(AbortReason reason);
     virtual void SendIotDescriptors(const std::string& descriptors);
     virtual void SendIotStates(const std::string& states);
-    virtual void UpdateRoomParams(const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token);
+    virtual void UpdateRoomParams(const websocket_config_t* ws_config);
 
 
 protected:
@@ -71,6 +72,10 @@ protected:
     std::string access_token_;
     std::string bot_id_;
     std::string voice_id_;
+    std::string api_domain_;
+    std::string voice_lang_;
+    std::string user_id_;
+    int expires_in_;
 
     int server_sample_rate_ = 24000;
     int server_frame_duration_ = 60;
