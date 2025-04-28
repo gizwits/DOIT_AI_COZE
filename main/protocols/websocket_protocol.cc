@@ -16,7 +16,7 @@
 // in_str:{"method":"websocket.auth.response","body":{"platform_type":1,"token_quota":500000,"coze_websocket":{"bot_id":"7483788991729270847","voice_id":"7426720361753968677","user_id":"nd7ec83a","conv_id":"7486307379559104521","access_token":"czs_qNqGYuaxk7GQXXz5l6RwjaUYyE6y0sqCuRUl1enbJUPkMYQWgosyTdLpCDOZcEZOr","expires_in":3540}}}
 
 // CRC lookup table for Ogg checksum calculation
-static const uint32_t crc_table[256] = {
+const uint32_t crc_table[256] = {
     0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9,
     0x130476dc, 0x17c56b6b, 0x1a864db2, 0x1e475005,
     0x2608edb8, 0x22c9f00f, 0x2f8ad6d6, 0x2b4bcb61,
@@ -98,37 +98,6 @@ bool WebsocketProtocol::Start() {
     return true;
 }
 
-// Opus header structures
-struct OpusHead {
-    char magic[8] = {'O', 'p', 'u', 's', 'H', 'e', 'a', 'd'};
-    uint8_t version = 1;
-    uint8_t channels = 1;
-    uint16_t preskip = 0;
-    uint32_t sample_rate = 16000;
-    int16_t output_gain = 0;
-    uint8_t channel_mapping = 0;
-} __attribute__((packed));
-
-struct OpusTags {
-    char magic[8] = {'O', 'p', 'u', 's', 'T', 'a', 'g', 's'};
-    uint32_t vendor_string_length = 7;  // Length of "DOIT_AI"
-    char vendor_string[32] = "DOIT_AI";
-    uint32_t comment_list_length = 0;
-} __attribute__((packed));
-
-// Ogg page header structure
-struct OggPageHeader {
-    char capture_pattern[4] = {'O', 'g', 'g', 'S'};
-    uint8_t version = 0;
-    uint8_t header_type = 0;
-    uint64_t granule_position = 0;
-    uint32_t bitstream_serial_number = 0;
-    uint32_t page_sequence_number = 0;
-    uint32_t checksum = 0;
-    uint8_t page_segments = 1;
-    uint8_t segment_table[1];
-} __attribute__((packed));
-
 // Calculate Ogg checksum
 uint32_t CalculateOggChecksum(const uint8_t* data, size_t length) {
     uint32_t crc = 0;
@@ -143,117 +112,114 @@ void WebsocketProtocol::SendAudio(const std::vector<uint8_t>& data) {
         return;
     }
 
-    std::vector<uint8_t> ogg_data;
-
     if (is_first_packet_) {
         // Create and send OpusHead
-        OpusHead opus_head;
-        OggPageHeader ogg_header;
-        ogg_header.header_type = 2;  // BOS (Beginning of Stream)
-        ogg_header.bitstream_serial_number = 0x12345678;
-        ogg_header.page_sequence_number = 0;
-        ogg_header.page_segments = 1;
-        ogg_header.segment_table[0] = sizeof(OpusHead);
+        ogg_header_.header_type = 2;  // BOS (Beginning of Stream)
+        ogg_header_.bitstream_serial_number = 0x12345678;
+        ogg_header_.page_sequence_number = 0;
+        ogg_header_.page_segments = 1;
+        ogg_header_.segment_table[0] = sizeof(OpusHead);
 
         // Calculate total size
         const size_t total_size = sizeof(OggPageHeader) + sizeof(OpusHead);
-        ogg_data.resize(total_size);
+        ogg_data_buffer_.resize(total_size);
 
         // Copy headers
-        memcpy(ogg_data.data(), &ogg_header, sizeof(OggPageHeader));
-        memcpy(ogg_data.data() + sizeof(OggPageHeader), &opus_head, sizeof(OpusHead));
+        memcpy(ogg_data_buffer_.data(), &ogg_header_, sizeof(OggPageHeader));
+        memcpy(ogg_data_buffer_.data() + sizeof(OggPageHeader), &opus_head_, sizeof(OpusHead));
 
         // Calculate and set checksum
-        uint32_t checksum = CalculateOggChecksum(ogg_data.data(), total_size);
-        memcpy(ogg_data.data() + 22, &checksum, sizeof(uint32_t));
+        uint32_t checksum = CalculateOggChecksum(ogg_data_buffer_.data(), total_size);
+        memcpy(ogg_data_buffer_.data() + 22, &checksum, sizeof(uint32_t));
 
         // Send OpusHead
-        SendOggData(ogg_data);
+        SendOggData(ogg_data_buffer_);
 
         // Create and send OpusTags
-        OpusTags opus_tags;
-        ogg_header.header_type = 0;
-        ogg_header.page_sequence_number = 1;
-        ogg_header.page_segments = 1;
-        ogg_header.segment_table[0] = sizeof(OpusTags);
+        ogg_header_.header_type = 0;
+        ogg_header_.page_sequence_number = 1;
+        ogg_header_.page_segments = 1;
+        ogg_header_.segment_table[0] = sizeof(OpusTags);
 
         // Calculate total size
         const size_t tags_size = sizeof(OggPageHeader) + sizeof(OpusTags);
-        ogg_data.resize(tags_size);
+        ogg_data_buffer_.resize(tags_size);
 
         // Copy headers
-        memcpy(ogg_data.data(), &ogg_header, sizeof(OggPageHeader));
-        memcpy(ogg_data.data() + sizeof(OggPageHeader), &opus_tags, sizeof(OpusTags));
+        memcpy(ogg_data_buffer_.data(), &ogg_header_, sizeof(OggPageHeader));
+        memcpy(ogg_data_buffer_.data() + sizeof(OggPageHeader), &opus_tags_, sizeof(OpusTags));
 
         // Calculate and set checksum
-        checksum = CalculateOggChecksum(ogg_data.data(), tags_size);
-        memcpy(ogg_data.data() + 22, &checksum, sizeof(uint32_t));
+        checksum = CalculateOggChecksum(ogg_data_buffer_.data(), tags_size);
+        memcpy(ogg_data_buffer_.data() + 22, &checksum, sizeof(uint32_t));
 
         // Send OpusTags
-        SendOggData(ogg_data);
+        SendOggData(ogg_data_buffer_);
 
         is_first_packet_ = false;
     }
 
     // Create Ogg page for Opus data
-    OggPageHeader ogg_header;
-    ogg_header.header_type = 0;
-    ogg_header.granule_position = data.size();  // Simplified granule position
-    ogg_header.bitstream_serial_number = 0x12345678;
-    ogg_header.page_sequence_number++;
-    ogg_header.page_segments = 1;
-    ogg_header.segment_table[0] = data.size();
+    ogg_header_.header_type = 0;
+    ogg_header_.granule_position = data.size();  // Simplified granule position
+    ogg_header_.bitstream_serial_number = 0x12345678;
+    ogg_header_.page_sequence_number++;
+    ogg_header_.page_segments = 1;
+    ogg_header_.segment_table[0] = data.size();
 
     // Calculate total size
     const size_t total_size = sizeof(OggPageHeader) + data.size();
-    ogg_data.resize(total_size);
+    ogg_data_buffer_.resize(total_size);
 
     // Copy headers and data
-    memcpy(ogg_data.data(), &ogg_header, sizeof(OggPageHeader));
-    memcpy(ogg_data.data() + sizeof(OggPageHeader), data.data(), data.size());
+    memcpy(ogg_data_buffer_.data(), &ogg_header_, sizeof(OggPageHeader));
+    memcpy(ogg_data_buffer_.data() + sizeof(OggPageHeader), data.data(), data.size());
 
     // Calculate and set checksum
-    uint32_t checksum = CalculateOggChecksum(ogg_data.data(), total_size);
-    memcpy(ogg_data.data() + 22, &checksum, sizeof(uint32_t));
+    uint32_t checksum = CalculateOggChecksum(ogg_data_buffer_.data(), total_size);
+    memcpy(ogg_data_buffer_.data() + 22, &checksum, sizeof(uint32_t));
 
     // Send Opus data
-    SendOggData(ogg_data);
+    SendOggData(ogg_data_buffer_);
 }
 
 void WebsocketProtocol::SendOggData(const std::vector<uint8_t>& ogg_data) {
-    // Convert to base64
+    // Calculate required base64 buffer size
     size_t out_len = 4 * ((ogg_data.size() + 2) / 3);
-    char *base64_buffer = (char*)malloc(out_len + 1);
-    if (!base64_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate base64 buffer");
-        return;
+    
+    // Resize base64 buffer if needed
+    if (out_len + 1 > base64_buffer_size_) {
+        base64_buffer_.reset(new char[out_len + 1]);
+        base64_buffer_size_ = out_len + 1;
+        if (!base64_buffer_) {
+            ESP_LOGE(TAG, "Failed to allocate base64 buffer");
+            return;
+        }
     }
 
     size_t encoded_len;
-    mbedtls_base64_encode((unsigned char *)base64_buffer, out_len + 1, &encoded_len,
+    mbedtls_base64_encode((unsigned char *)base64_buffer_.get(), base64_buffer_size_, &encoded_len,
                          (const unsigned char*)ogg_data.data(), ogg_data.size());
-    base64_buffer[encoded_len] = '\0';
+    base64_buffer_[encoded_len] = '\0';
 
     // Create event ID
     char event_id[32];
     uint32_t random_value = esp_random();
     snprintf(event_id, sizeof(event_id), "%lu", random_value);
 
-    // Build message
-    std::string message = "{";
-    message += "\"id\":\"" + std::string(event_id) + "\",";
-    message += "\"event_type\":\"input_audio_buffer.append\",";
-    message += "\"data\":{";
-    message += "\"delta\":\"" + std::string(base64_buffer) + "\"";
-    message += "}";
-    message += "}";
+    // Reuse message buffer
+    message_buffer_.clear();
+    message_buffer_.reserve(256 + out_len);  // Pre-allocate space
+    message_buffer_ = "{";
+    message_buffer_ += "\"id\":\"" + std::string(event_id) + "\",";
+    message_buffer_ += "\"event_type\":\"input_audio_buffer.append\",";
+    message_buffer_ += "\"data\":{";
+    message_buffer_ += "\"delta\":\"" + std::string(base64_buffer_.get()) + "\"";
+    message_buffer_ += "}";
+    message_buffer_ += "}";
 
     // Send message
-    websocket_->Send(message);
-
-    // ESP_LOGI(TAG, "Send message: %s", message.c_str());
-    // Cleanup
-    free(base64_buffer);
+    websocket_->Send(message_buffer_);
 }
 
 void WebsocketProtocol::SendAudio(const std::vector<int16_t>& data) {
@@ -264,14 +230,14 @@ void WebsocketProtocol::SendAudio(const std::vector<int16_t>& data) {
     // 将 int16_t 数据转换为 base64
     size_t data_size = data.size() * sizeof(int16_t);
     size_t out_len = 4 * ((data_size + 2) / 3);  // base64 编码后的长度
-    char *base64_buffer = (char*)malloc(out_len + 1);
+    std::unique_ptr<char[]> base64_buffer(new char[out_len + 1]);
     if (!base64_buffer) {
         ESP_LOGE(TAG, "Failed to allocate base64 buffer");
         return;
     }
 
     size_t encoded_len;
-    mbedtls_base64_encode((unsigned char *)base64_buffer, out_len + 1, &encoded_len,
+    mbedtls_base64_encode((unsigned char *)base64_buffer.get(), out_len + 1, &encoded_len,
                          (const unsigned char*)data.data(), data_size);
     base64_buffer[encoded_len] = '\0';
 
@@ -285,14 +251,12 @@ void WebsocketProtocol::SendAudio(const std::vector<int16_t>& data) {
     message += "\"id\":\"" + std::string(event_id) + "\",";
     message += "\"event_type\":\"input_audio_buffer.append\",";
     message += "\"data\":{";
-    message += "\"delta\":\"" + std::string(base64_buffer) + "\"";
+    message += "\"delta\":\"" + std::string(base64_buffer.get()) + "\"";
     message += "}";
     message += "}";
 
     // 发送消息
     websocket_->Send(message);
-    // 清理
-    free(base64_buffer);
 }
 
 bool WebsocketProtocol::SendText(const std::string& text) {
@@ -358,11 +322,12 @@ bool WebsocketProtocol::OpenAudioChannel() {
     websocket_->SetHeader("Authorization", token.c_str());
 
     websocket_->OnData([this](const char* data, size_t len, bool binary) {
-        // ESP_LOGI(TAG, "Received data: %s", data);
         if (!data || len == 0) {
             return;
         }
-        std::string_view str_data(data, len);  // 将 const char* 转换为 string_view
+
+        // Reuse string view for data
+        std::string_view str_data(data, len);
 
         constexpr std::string_view key = "\"event_type\":\"";
         size_t event_start = str_data.find(key);
@@ -371,28 +336,22 @@ bool WebsocketProtocol::OpenAudioChannel() {
         }
 
         event_start += key.length();
-
-        // 找到事件类型结束的引号位置
         size_t event_end = str_data.find('"', event_start);
         if (event_end == std::string_view::npos) {
             return;
         }
 
-        // 提取事件类型
         std::string_view event_type = str_data.substr(event_start, event_end - event_start);
-
         if (event_type.empty() || event_type.length() >= 64) {
             return;
         }
 
         if(event_type == "conversation.audio.delta") {
-            // 查找 content 字段
             constexpr std::string_view content_key = "\"content\":\"";
             size_t content_start = str_data.find(content_key);
             if (content_start != std::string_view::npos) {
                 content_start += content_key.length();
                 
-                // 找到 content 结束的位置 (下一个未转义的引号)
                 size_t content_end = content_start;
                 bool escaped = false;
                 
@@ -408,90 +367,108 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 }
                 
                 if (content_end < str_data.length()) {
-
-                    // 提取 base64 编码的内容
                     std::string_view base64_content = str_data.substr(content_start, content_end - content_start);
                     
-                    // 计算解码后的长度
+                    // Calculate decoded size
                     size_t output_len = 0;
                     mbedtls_base64_decode(nullptr, 0, &output_len, 
                         (const unsigned char*)base64_content.data(), 
                         base64_content.length());
 
+                    // Reuse buffer for decoded data
+                    if (output_len > ogg_data_buffer_.capacity()) {
+                        ogg_data_buffer_.reserve(output_len);
+                    }
+                    ogg_data_buffer_.resize(output_len);
 
-                    // 分配内存并解码
-                    std::vector<uint8_t> decoded_data(output_len);
                     size_t actual_len = 0;
                     int ret = mbedtls_base64_decode(
-                        decoded_data.data(), decoded_data.size(), &actual_len,
+                        ogg_data_buffer_.data(), ogg_data_buffer_.size(), &actual_len,
                         (const unsigned char*)base64_content.data(), 
                         base64_content.length());
 
-
                     if (ret == 0 && actual_len > 0) {
-                        // 回调处理解码后的音频数据
                         if (on_incoming_audio_ != nullptr) {
-                            on_incoming_audio_(std::move(decoded_data));
+                            std::vector<uint8_t> audio_data(ogg_data_buffer_.begin(), ogg_data_buffer_.begin() + actual_len);
+                            on_incoming_audio_(std::move(audio_data));
                         }
                     }
                 }
             }
         } else {
-            auto root = cJSON_Parse(data);
+            // Reuse cJSON root
+            cJSON* root = cJSON_Parse(data);
+            if (!root) {
+                return;
+            }
+
             if (event_type == "chat.created") {
                 ParseServerHello(root);
             } else if (event_type == "conversation.audio_transcript.update") {
-                // 识别到的文本
                 auto data_json = cJSON_GetObjectItem(root, "data");
                 auto content_json = cJSON_GetObjectItem(data_json, "content");
-                std::string message = "{";
-                message += "\"type\":\"stt\",";
-                message += "\"text\":\"" + std::string(content_json->valuestring) + "\"";
-                message += "}";
-                 auto message_json = cJSON_Parse(message.c_str());
-                on_incoming_json_(message_json);
-                cJSON_Delete(message_json);
-
+                
+                // Reuse message buffer
+                message_buffer_.clear();
+                message_buffer_ = "{";
+                message_buffer_ += "\"type\":\"stt\",";
+                message_buffer_ += "\"text\":\"" + std::string(content_json->valuestring) + "\"";
+                message_buffer_ += "}";
+                
+                auto message_json = cJSON_Parse(message_buffer_.c_str());
+                if (message_json) {
+                    on_incoming_json_(message_json);
+                    cJSON_Delete(message_json);
+                }
             } else if (event_type == "conversation.chat.in_progress") {
-                // 清空字幕缓存
-                message_cache_ = "";
-                std::string message = "{";
-                message += "\"type\":\"tts\",";
-                message += "\"state\":\"start\"";
-                message += "}";
-                auto message_json = cJSON_Parse(message.c_str());
-                on_incoming_json_(message_json);
-                cJSON_Delete(message_json);
+                message_cache_.clear();
+                message_buffer_.clear();
+                message_buffer_ = "{";
+                message_buffer_ += "\"type\":\"tts\",";
+                message_buffer_ += "\"state\":\"start\"";
+                message_buffer_ += "}";
+                
+                auto message_json = cJSON_Parse(message_buffer_.c_str());
+                if (message_json) {
+                    on_incoming_json_(message_json);
+                    cJSON_Delete(message_json);
+                }
             } else if (event_type == "conversation.audio.completed") {
-                std::string message = "{";
-                message += "\"type\":\"tts\",";
-                message += "\"state\":\"stop\"";
-                message += "}";
-                auto message_json = cJSON_Parse(message.c_str());
-                on_incoming_json_(message_json);
-                cJSON_Delete(message_json);
+                message_buffer_.clear();
+                message_buffer_ = "{";
+                message_buffer_ += "\"type\":\"tts\",";
+                message_buffer_ += "\"state\":\"stop\"";
+                message_buffer_ += "}";
+                
+                auto message_json = cJSON_Parse(message_buffer_.c_str());
+                if (message_json) {
+                    on_incoming_json_(message_json);
+                    cJSON_Delete(message_json);
+                }
             } else if (event_type == "conversation.message.delta") {
-                // 解析 content
-                // ESP_LOGI(TAG, "conversation.message.delta %s", str_data.data());
                 auto data_json = cJSON_GetObjectItem(root, "data");
                 auto content_json = cJSON_GetObjectItem(data_json, "content");
 
                 message_cache_ += std::string(content_json->valuestring);
-                std::string message = "{";
-                message += "\"type\":\"tts\",";
-                message += "\"state\":\"sentence_start\",";
-                message += "\"text\":\"" + message_cache_ + "\"";
-                message += "}";
-                auto message_json = cJSON_Parse(message.c_str());
-                on_incoming_json_(message_json);
-                cJSON_Delete(message_json);
+                message_buffer_.clear();
+                message_buffer_ = "{";
+                message_buffer_ += "\"type\":\"tts\",";
+                message_buffer_ += "\"state\":\"sentence_start\",";
+                message_buffer_ += "\"text\":\"" + message_cache_ + "\"";
+                message_buffer_ += "}";
+                
+                auto message_json = cJSON_Parse(message_buffer_.c_str());
+                if (message_json) {
+                    on_incoming_json_(message_json);
+                    cJSON_Delete(message_json);
+                }
             } else if (event_type == "conversation.chat.requires_action") {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {
                 ESP_LOGE(TAG, "Error: %s", str_data.data());
-            } else {
-                ESP_LOGI(TAG, "Unknown event type: %s", event_type.data());
             }
+            
+            cJSON_Delete(root);
         }
         last_incoming_time_ = std::chrono::steady_clock::now();
     });
@@ -578,7 +555,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     message += "\"frame_size_ms\":60,";
     message += "\"limit_config\":{";
     message += "\"period\":1,";
-    message += "\"max_frame_num\":18";
+    message += "\"max_frame_num\":20";
     message += "}";
     message += "},";
     message += "\"speech_rate\":0,";

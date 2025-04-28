@@ -146,8 +146,9 @@ void Protocol::UpdateRoomParams(const std::string& bot_id, const std::string& vo
     access_token_ = access_token;
     bot_id_ = bot_id;
     voice_id_ = voice_id;
-    // conversation_id_ = "7497836386708668425";
-    // access_token_ = "czs_hFbEVLbFgscsbgJYTXt4eeANQ96Cysr2gZQbi5v2ftqMZ1y7y61ck8DhPcUuLWul1";
-    // bot_id_ = "7496785771031134243";
-    // voice_id_ = "7481299960428789799";
+
+    // conversation_id_ = "7497996996414816295";
+    // access_token_ = "czs_hHJsxwLnD3JPbzqchSoIaLrHYfhw6D3PPSnujU5CLXO5qjNmDWd232YzNK1PvGXqg";
+    // bot_id_ = "7486372905413787700";
+    // voice_id_ = "7426725529589563419";
 }
