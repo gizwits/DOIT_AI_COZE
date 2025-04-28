@@ -419,7 +419,7 @@ void Application::Start() {
     先 provision 获取相关信息
      */
     Settings settings("wifi", true);
-    bool need_activation = settings.GetInt("need_activation");
+    bool need_bootstrap = settings.GetInt("need_bootstrap");
     // 创建信号量用于等待回调完成
     SemaphoreHandle_t config_sem = xSemaphoreCreateBinary();
     if (config_sem == nullptr) {
@@ -427,15 +427,15 @@ void Application::Start() {
         return;
     }
 
-    if (need_activation == 1) {
-        ESP_LOGI(TAG, "need_activation is true");
+    if (need_bootstrap == 1) {
+        ESP_LOGI(TAG, "need_bootstrap is true");
         // 调用注册
         GServer::activationDevice([this, config_sem, &settings](mqtt_config_t* config) {
             xSemaphoreGive(config_sem);
-            settings.SetInt("need_activation", 0);
+            settings.SetInt("need_bootstrap", 0);
         });
     } else {
-        ESP_LOGI(TAG, "need_activation is false");
+        ESP_LOGI(TAG, "need_bootstrap is false");
         // 调用Provision 获取相关信息
         GServer::getProvision([this, config_sem](mqtt_config_t* config) {
             xSemaphoreGive(config_sem);
