@@ -18,8 +18,8 @@
 #include <esp_log.h>
 
 #include <wifi_station.h>
-#include <wifi_configuration_ap.h>
-#include <wifi_configuration_ble.h>
+#include <auth.h>
+#include <wifi_configuration.h>
 #include <wifi_connection_manager.h>
 #include <ssid_manager.h>
 
@@ -43,34 +43,11 @@ void WifiBoard::EnterWifiConfigMode() {
     application.SetDeviceState(kDeviceStateWifiConfiguring);
 
     // 初始化 WiFi模块
-    WifiConnectionManager::GetInstance().InitializeWiFi();
-#ifdef CONFIG_CONNECTION_TYPE_AP
 
-    std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
-    hint += wifi_ap.GetSsid();
-    hint += Lang::Strings::ACCESS_VIA_BROWSER;
-    hint += wifi_ap.GetWebServerUrl();
-    hint += "\n\n";
-    // 播报配置 WiFi 的提示
-    application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
-
-    auto& wifi_ap = WifiConfigurationAp::GetInstance();
-    wifi_ap.SetLanguage(Lang::CODE);
-    wifi_ap.SetSsidPrefix("Xiaozhi");
-    wifi_ap.Start();
-    
-#endif
-
-#ifdef CONFIG_CONNECTION_TYPE_BLE 
+    WifiConfiguration::GetInstance().Initialize(Auth::getProductKey(), "XPG-GAgent");
     std::string hint = Lang::Strings::OPEN_MINI_APP;
     hint += "\n\n";
     application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
-    // 临时处理。。蓝牙初始化会吃掉大量资源
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    auto& ble_config = WifiConfigurationBle::getInstance();
-    ble_config.init(CONFIG_PRODUCT_KEY);  // 传入产品密钥
-#endif
     
     // Wait forever until reset after configuration
     while (true) {

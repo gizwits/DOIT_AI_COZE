@@ -419,7 +419,7 @@ void Application::Start() {
     先 provision 获取相关信息
      */
     Settings settings("wifi", true);
-    bool need_bootstrap = settings.GetInt("need_bootstrap");
+    bool need_bootstrap = settings.GetInt("need_activation");
     // 创建信号量用于等待回调完成
     SemaphoreHandle_t config_sem = xSemaphoreCreateBinary();
     if (config_sem == nullptr) {
