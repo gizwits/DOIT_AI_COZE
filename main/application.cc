@@ -404,61 +404,16 @@ void Application::Start() {
     protocol_ = std::make_unique<WebsocketProtocol>();
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
-    // mqtt_client_ = std::make_unique<MqttClient>();
-    // mqtt_client_->OnRoomParamsUpdated([this](const std::string& bot_id, const std::string& voice_id, const std::string& conv_id, const std::string& access_token) {
-    //     protocol_->UpdateRoomParams(bot_id, voice_id, conv_id, access_token);
-    // });
-
-    // if (!mqtt_client_->initialize()) {
-    //     ESP_LOGE(TAG, "Failed to initialize MQTT client");
-    //     Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
-    //     return;
-    // }
-
-    /**
-    先 provision 获取相关信息
-     */
-    Settings settings("wifi", true);
-    bool need_bootstrap = settings.GetInt("need_activation");
-    // 创建信号量用于等待回调完成
-    SemaphoreHandle_t config_sem = xSemaphoreCreateBinary();
-    if (config_sem == nullptr) {
-        ESP_LOGE(TAG, "Failed to create semaphore");
-        return;
-    }
-
-    if (need_bootstrap == 1) {
-        ESP_LOGI(TAG, "need_bootstrap is true");
-        // 调用注册
-        GServer::activationDevice([this, config_sem, &settings](mqtt_config_t* config) {
-            xSemaphoreGive(config_sem);
-            settings.SetInt("need_bootstrap", 0);
-        });
-    } else {
-        ESP_LOGI(TAG, "need_bootstrap is false");
-        // 调用Provision 获取相关信息
-        GServer::getProvision([this, config_sem](mqtt_config_t* config) {
-            xSemaphoreGive(config_sem);
-        });
-    }
-    // 等待回调完成，超时时间设为10秒
-    if (xSemaphoreTake(config_sem, pdMS_TO_TICKS(10000)) != pdTRUE) {
-        ESP_LOGE(TAG, "Timeout waiting for MQTT config");
-        vSemaphoreDelete(config_sem);
-        return;
-    }
-    vSemaphoreDelete(config_sem);
-    /**
-    先 provision 获取相关信息
-     */
-
-    GServer::getWebsocketConfig([this](websocket_config_t* config) {
-        ESP_LOGI(TAG, "Websocket config: %s", config->coze_websocket.api_domain);
-        if (config) {
-            protocol_->UpdateRoomParams(config);
-        }
+    mqtt_client_ = std::make_unique<MqttClient>();
+    mqtt_client_->OnRoomParamsUpdated([this](websocket_config_t* params) {
+        protocol_->UpdateRoomParams(params);
     });
 
+    if (!mqtt_client_->initialize()) {
+        ESP_LOGE(TAG, "Failed to initialize MQTT client");
+        Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
+        return;
+    }
 
     // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {

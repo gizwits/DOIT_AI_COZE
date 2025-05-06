@@ -20,6 +20,47 @@ bool MqttClient::initialize() {
         delete mqtt_;
     }
 
+    Settings settings("wifi", true);
+    bool need_activation = settings.GetInt("need_activation");
+    // 创建信号量用于等待回调完成
+    SemaphoreHandle_t config_sem = xSemaphoreCreateBinary();
+    if (config_sem == nullptr) {
+        ESP_LOGE(TAG, "Failed to create semaphore");
+        return false;
+    }
+
+    if (need_activation == 1) {
+        ESP_LOGI(TAG, "need_activation is true");
+        // 调用注册
+        GServer::activationDevice([this, config_sem, &settings](mqtt_config_t* config) {
+            endpoint_ = config->mqtt_address;
+            port_ = std::stoi(config->mqtt_port);
+            ESP_LOGI(TAG, "MQTT endpoint: %s, port: %d", endpoint_.c_str(), port_);
+            xSemaphoreGive(config_sem);
+
+            settings.SetInt("need_activation", 0);
+        });
+    } else {
+        ESP_LOGI(TAG, "need_activation is false");
+        // 调用Provision 获取相关信息
+        GServer::getProvision([this, config_sem](mqtt_config_t* config) {
+            endpoint_ = config->mqtt_address;
+            port_ = std::stoi(config->mqtt_port);
+            ESP_LOGI(TAG, "MQTT endpoint: %s, port: %d", endpoint_.c_str(), port_);
+            xSemaphoreGive(config_sem);
+        });
+    }
+
+    // 等待回调完成，超时时间设为10秒
+    if (xSemaphoreTake(config_sem, pdMS_TO_TICKS(10000)) != pdTRUE) {
+        ESP_LOGE(TAG, "Timeout waiting for MQTT config");
+        vSemaphoreDelete(config_sem);
+        return false;
+    }
+    vSemaphoreDelete(config_sem);
+
+    settings.SetInt("need_activation", 0);
+
     client_id_ = Auth::getDeviceId();
     
     // 准备认证信息
@@ -177,7 +218,7 @@ void MqttClient::sendTokenReport(int total, int output, int input) {
     }
 }
 
-void MqttClient::OnRoomParamsUpdated(std::function<void(const std::string&, const std::string&, const std::string&, const std::string&)> callback) {
+void MqttClient::OnRoomParamsUpdated(std::function<void(websocket_config_t* params)> callback) {
     room_params_updated_callback_ = callback;
 }
 
@@ -300,6 +341,9 @@ bool MqttClient::parseRealtimeAgent(const char* in_str, int in_len, room_params_
                 cJSON* user_id = cJSON_GetObjectItem(coze_websocket, "user_id");
                 cJSON* conv_id = cJSON_GetObjectItem(coze_websocket, "conv_id");
                 cJSON* access_token = cJSON_GetObjectItem(coze_websocket, "access_token");
+                cJSON* api_domain = cJSON_GetObjectItem(coze_websocket, "api_domain");
+                cJSON* voice_lang = cJSON_GetObjectItem(coze_websocket, "voice_lang");
+                cJSON* expires_in = cJSON_GetObjectItem(coze_websocket, "expires_in");
 
                 if (bot_id && voice_id && user_id && conv_id && access_token) {
                     strncpy(params->bot_id, bot_id->valuestring, sizeof(params->bot_id) - 1);
@@ -307,6 +351,15 @@ bool MqttClient::parseRealtimeAgent(const char* in_str, int in_len, room_params_
                     strncpy(params->user_id, user_id->valuestring, sizeof(params->user_id) - 1);
                     strncpy(params->conv_id, conv_id->valuestring, sizeof(params->conv_id) - 1);
                     strncpy(params->access_token, access_token->valuestring, sizeof(params->access_token) - 1);
+                    if (api_domain) {
+                        strncpy(params->api_domain, api_domain->valuestring, sizeof(params->api_domain) - 1);
+                    }
+                    if (voice_lang) {
+                        strncpy(params->voice_lang, voice_lang->valuestring, sizeof(params->voice_lang) - 1);
+                    }
+                    if (expires_in) {
+                        params->expires_in = expires_in->valueint;
+                    }
                     success = true;
                 }
             }
@@ -348,7 +401,20 @@ void MqttClient::handleMqttMessage(mqtt_msg_t* msg) {
                 xTimerDelete(timer_, 0);
                 timer_ = nullptr;
             }
-            room_params_updated_callback_(params.bot_id, params.voice_id, params.conv_id, params.access_token);
+            websocket_config_t config = {0};
+            config.platform_type = 1;  // 设置默认值
+            config.token_quota = 500000; // 从JSON中获取的值
+            strncpy(config.coze_websocket.api_domain, params.api_domain, sizeof(config.coze_websocket.api_domain) - 1);
+            strncpy(config.coze_websocket.bot_id, params.bot_id, sizeof(config.coze_websocket.bot_id) - 1);
+            strncpy(config.coze_websocket.voice_id, params.voice_id, sizeof(config.coze_websocket.voice_id) - 1);
+            strncpy(config.coze_websocket.user_id, params.user_id, sizeof(config.coze_websocket.user_id) - 1);
+            strncpy(config.coze_websocket.conv_id, params.conv_id, sizeof(config.coze_websocket.conv_id) - 1);
+            strncpy(config.coze_websocket.access_token, params.access_token, sizeof(config.coze_websocket.access_token) - 1);
+            strncpy(config.coze_websocket.voice_lang, params.voice_lang, sizeof(config.coze_websocket.voice_lang) - 1);
+            config.coze_websocket.expires_in = params.expires_in;
+            if (room_params_updated_callback_) {
+                room_params_updated_callback_(&config);
+            }
         }
     } else if (strstr(msg->topic, "push")) {
         parseM2MCtrlMsg(msg->payload, msg->payload_len);
