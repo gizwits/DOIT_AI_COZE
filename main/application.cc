@@ -41,7 +41,7 @@ Application::Application() {
     event_group_ = xEventGroupCreate();
 #if (defined(CONFIG_IDF_TARGET_ESP32C2) || defined(CONFIG_IDF_TARGET_ESP32C3))
 #if (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS) && defined(CONFIG_USE_AUDIO_CODEC_DECODE_OPUS))
-    background_task_ = new BackgroundTask(4096);
+    background_task_ = new BackgroundTask(2048);
 #elif (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS))
     background_task_ = new BackgroundTask(4096 * 2 + 768);
     // background_task_ = new BackgroundTask(4096 * 2 + 512);
@@ -404,6 +404,13 @@ void Application::Start() {
 
     // Initialize MQTT client
     protocol_ = std::make_unique<WebsocketProtocol>();
+    // RoomParams params;
+    // params.bot_id = "7497920085005697076";
+    // params.voice_id = "7426725529589563419";
+    // params.conv_id = "7501568389597610010";
+    // params.access_token = "czs_hg0hmyMKSuYwn6ezieCNuuN9qwt8z5lb0J5QVrJDgNyvIDQJOeC1xFYCRVSIGbaiZ";
+    // params.api_domain = "ws.coze.cn";
+    // protocol_->UpdateRoomParams(params);
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
     mqtt_client_ = std::make_unique<MqttClient>();
@@ -433,7 +440,7 @@ void Application::Start() {
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
     });
     protocol_->OnIncomingAudio([this](std::vector<uint8_t>&& data) {
-        const int max_packets_in_queue = 1000 / OPUS_FRAME_DURATION_MS;
+        const int max_packets_in_queue = 1300 / OPUS_FRAME_DURATION_MS;
         std::lock_guard<std::mutex> lock(mutex_);
         if (audio_decode_queue_.size() < max_packets_in_queue) {
             audio_decode_queue_.emplace_back(std::move(data));
@@ -878,6 +885,7 @@ void Application::AbortSpeaking(AbortReason reason) {
     ESP_LOGI(TAG, "Abort speaking");
     aborted_ = true;
     protocol_->SendAbortSpeaking(reason);
+    SetDeviceState(kDeviceStateListening);
 }
 
 void Application::SetListeningMode(ListeningMode mode) {

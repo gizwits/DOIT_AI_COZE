@@ -109,12 +109,6 @@ Http* WifiBoard::CreateHttp() {
 }
 
 WebSocket* WifiBoard::CreateWebSocket() {
-    std::string url = CONFIG_COZE_WEBSOCKET_URL;
-    // if (url.find("wss://") == 0) {
-    //     return new WebSocket(new TlsTransport());
-    // } else {
-    //     return new WebSocket(new TcpTransport());
-    // }
     return new WebSocket(new TcpTransport());
 }
 

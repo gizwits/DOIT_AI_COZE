@@ -66,9 +66,10 @@ public:
     
     // 获取MQTT配置
     static int32_t getProvision(std::function<void(mqtt_config_t*)> callback);
+    static int32_t getLimitProvision(std::function<void(mqtt_config_t*)> callback);
 
     // 获取MQTT配置
-    static int32_t getLimitProvision(std::function<void(mqtt_config_t*)> callback);
+    static int32_t activationLimitDevice(std::function<void(mqtt_config_t*)> callback);
     
     // 执行Onboarding
     static int32_t activationDevice(std::function<void(mqtt_config_t*)> callback);

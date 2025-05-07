@@ -26,6 +26,11 @@ private:
     WebSocket* websocket_ = nullptr;
     EventGroupHandle_t event_group_handle_;
     std::string message_cache_;
+    bool is_first_packet_ = true;
+    std::vector<uint8_t> audio_data_buffer_;  // Reuse buffer for Ogg data
+    std::unique_ptr<char[]> base64_buffer_;  // Reuse buffer for base64 encoding
+    size_t base64_buffer_size_ = 0;  // Current size of base64 buffer
+    std::string message_buffer_;  // Reuse buffer for message construction
    
 
     void ParseServerHello(const cJSON* root);

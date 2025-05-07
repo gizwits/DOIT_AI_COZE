@@ -220,6 +220,10 @@ const char* GServer::gatCreateETag(uint8_t *szNonce, uint8_t *body) {
     
     memset(input, 0, sizeof(input));
     std::string auth_key = Auth::getInstance().getAuthKey();
+    // 如果 auth_key 是空，使用 ps
+    if (auth_key.empty()) {
+        auth_key = Auth::getInstance().getProductSecret();
+    }
     snprintf(input, sizeof(input) - 1, "%s,%s,%s", auth_key.c_str(), szNonce, body);
                 
     // 生成SHA256 token
@@ -311,13 +315,11 @@ int32_t GServer::getProvision(std::function<void(mqtt_config_t*)> callback) {
 }
 
 
+
 int32_t GServer::getLimitProvision(std::function<void(mqtt_config_t*)> callback) {
     mqtt_config_cb = callback;
     std::string did = Auth::getInstance().getDeviceId();
-    std::string product_key = Auth::getInstance().getProductKey();
-    std::string mac = (char*)GServer::gatNetMACGet();
-
-    std::string url = "http://agent.gizwitsapi.com/v2/products/" + product_key + "/devices/" + mac + "/bootstrap";
+    std::string url = "http://agent.gizwitsapi.com/v2/devices/" + did + "/bootstrap";
     ESP_LOGI(TAG, "Provision URL: %s", url.c_str());
 
     // 创建token
@@ -344,6 +346,59 @@ int32_t GServer::getLimitProvision(std::function<void(mqtt_config_t*)> callback)
 
     std::string response = http->GetBody();
     delete http;
+
+    return getProvision_prase_cb(response.c_str(), response.length());
+}
+
+
+int32_t GServer::activationLimitDevice(std::function<void(mqtt_config_t*)> callback) {
+    mqtt_config_cb = callback;
+    std::string did = Auth::getInstance().getDeviceId();
+    std::string product_key = Auth::getInstance().getProductKey();
+    std::string mac = (char*)GServer::gatNetMACGet();
+
+    std::string url = "http://agent.gizwitsapi.com/v2/products/" + product_key + "/devices/" + mac + "/network";
+    
+    // 创建token
+    static uint8_t szNonce[PASSCODE_LEN + 1];
+    gatCreatNewPassCode(PASSCODE_LEN, szNonce);
+    const char *token = gatCreateLimitToken(szNonce);
+
+    // 准备请求体
+    Settings settings("wifi", true);
+    std::string uid = settings.GetString("uid", "");
+    ESP_LOGI(TAG, "UID: %s", uid.c_str());
+    
+    static uint8_t sOnboardingData[128];
+    int len = snprintf((char*)sOnboardingData, sizeof(sOnboardingData) - 1, 
+                      "is_reset=1&random_code=%s&lan_proto_ver=v5.0&user_id=%s", 
+                      getRandomCode(), uid.c_str());
+    sOnboardingData[len] = '\0';
+    
+    const char *ETag = gatCreateETag(szNonce, sOnboardingData);
+
+    // 使用Board的HTTP客户端
+    auto& board = Board::GetInstance();
+    auto http = board.CreateHttp();
+    
+    // 设置请求头
+    http->SetHeader("X-Sign-Method", "sha256");
+    http->SetHeader("X-Sign-Nonce", (const char*)szNonce);
+    http->SetHeader("X-Sign-Token", token);
+    http->SetHeader("X-Sign-ETag", ETag);
+    http->SetHeader("X-Trace-Id", get_trace_id());
+    http->SetHeader("Content-Type", "text/plain");
+
+    // 发送POST请求
+    if (!http->Open("POST", url, (const char*)sOnboardingData)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        delete http;
+        return -1;
+    }
+
+    std::string response = http->GetBody();
+    delete http;
+    ESP_LOGI(TAG, "response: %s", response.c_str());
 
     return getProvision_prase_cb(response.c_str(), response.length());
 }
