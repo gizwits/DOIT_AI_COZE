@@ -227,18 +227,6 @@ config PRODUCT_SECRET
     help
         Product secret for Gizwits.
 
-config DEVICE_ID
-    string "Device ID"
-    default ""
-    help
-        Device ID for Gizwits.
-
-config AUTH_KEY
-    string "Auth Key"
-    default ""
-    help
-        Auth key for Gizwits.
-
 choice CONNECTION_TYPE
     prompt "WiFi Connection Type"
     default CONNECTION_TYPE_BLE

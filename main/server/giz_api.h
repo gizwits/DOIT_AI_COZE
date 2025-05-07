@@ -25,23 +25,7 @@ struct mqtt_config_t {
     char product_secret[32];
     char mqtt_address[64];
     char mqtt_port[8];
-};
-
-struct coze_websocket_t {
-    char api_domain[64];
-    char access_token[128];
-    int expires_in;
-    char bot_id[32];
-    char voice_id[32];
-    char voice_lang[16];
-    char user_id[32];
-    char conv_id[32];
-};
-
-struct websocket_config_t {
-    int platform_type;
-    int token_quota;
-    coze_websocket_t coze_websocket;
+    char device_id[32];
 };
 
 struct onboarding_response_t {
@@ -82,16 +66,21 @@ public:
     
     // 获取MQTT配置
     static int32_t getProvision(std::function<void(mqtt_config_t*)> callback);
+
+    // 获取MQTT配置
+    static int32_t getLimitProvision(std::function<void(mqtt_config_t*)> callback);
     
     // 执行Onboarding
     static int32_t activationDevice(std::function<void(mqtt_config_t*)> callback);
 
-    static int32_t getWebsocketConfig(std::function<void(websocket_config_t*)> callback);
+    // 创建限流token
+    static const char* gatCreateLimitToken(uint8_t *szNonce);
 
 private:
     // 16进制转字符串
     static void hexToStr(uint8_t *dest, uint8_t *src, int32_t srcLen, int8_t flag);
     
+
     // 获取trace_id
     static char* get_trace_id();
 

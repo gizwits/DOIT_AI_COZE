@@ -134,31 +134,13 @@ bool Protocol::IsAudioChannelBusy() const {
 }
 
 
-void Protocol::UpdateRoomParams(const websocket_config_t* ws_config) {
-    if (!ws_config) {
-        ESP_LOGE(TAG, "Invalid websocket config pointer");
-        return;
-    }
-
+void Protocol::UpdateRoomParams(const RoomParams& params) {
     ESP_LOGI(TAG, "Updating WebSocket parameters:");
-    ESP_LOGI(TAG, "  Platform type: %d", ws_config->platform_type);
-    ESP_LOGI(TAG, "  Token quota: %d", ws_config->token_quota);
-    ESP_LOGI(TAG, "  API Domain: %s", ws_config->coze_websocket.api_domain);
-    ESP_LOGI(TAG, "  Access Token: %s", ws_config->coze_websocket.access_token);
-    ESP_LOGI(TAG, "  Expires in: %d", ws_config->coze_websocket.expires_in);
-    ESP_LOGI(TAG, "  Bot ID: %s", ws_config->coze_websocket.bot_id);
-    ESP_LOGI(TAG, "  Voice ID: %s", ws_config->coze_websocket.voice_id);
-    ESP_LOGI(TAG, "  Voice Lang: %s", ws_config->coze_websocket.voice_lang);
-    ESP_LOGI(TAG, "  User ID: %s", ws_config->coze_websocket.user_id);
-    ESP_LOGI(TAG, "  Conv ID: %s", ws_config->coze_websocket.conv_id);
+    ESP_LOGI(TAG, "  bot_id: %s", params.bot_id.c_str());
+    ESP_LOGI(TAG, "  voice_id: %s", params.voice_id.c_str());
+    ESP_LOGI(TAG, "  conv_id: %s", params.conv_id.c_str());
+    ESP_LOGI(TAG, "  access_token: %s", params.access_token.c_str());
 
     // 保存
-    conversation_id_ = ws_config->coze_websocket.conv_id;
-    access_token_ = ws_config->coze_websocket.access_token;
-    bot_id_ = ws_config->coze_websocket.bot_id;
-    voice_id_ = ws_config->coze_websocket.voice_id;
-    api_domain_ = ws_config->coze_websocket.api_domain;
-    expires_in_ = ws_config->coze_websocket.expires_in;
-    voice_lang_ = ws_config->coze_websocket.voice_lang;
-    user_id_ = ws_config->coze_websocket.user_id;
+    room_params_ = params;
 }

@@ -10,7 +10,7 @@
 #include "freertos/timers.h"
 #include <ml307_mqtt.h>
 #include "cJSON.h"
-#include "giz_api.h"
+#include "protocols/protocol.h"
 
 #define MQTT_REQUEST_FAILURE_COUNT 10
 
@@ -32,8 +32,8 @@ typedef struct {
     char user_id[64];
     char conv_id[64];
     char access_token[256];
-    char api_domain[64];
-    char voice_lang[16];
+    char voice_lang[64];
+    char api_domain[256];
     int expires_in;
 } room_params_t;
 
@@ -53,7 +53,7 @@ public:
     bool getRoomInfo();
     int sendResetToCloud();
     int getPublishedId();
-    void OnRoomParamsUpdated(std::function<void(websocket_config_t* params)> callback);
+    void OnRoomParamsUpdated(std::function<void(const RoomParams&)> callback);
     void deinit();
 
     MqttClient() = default;
@@ -63,7 +63,7 @@ public:
 
 private:
     Mqtt* mqtt_ = nullptr;
-    std::function<void(websocket_config_t* params)> room_params_updated_callback_;
+    std::function<void(const RoomParams&)> room_params_updated_callback_;
     std::function<void(const std::string&, const std::string&)> message_callback_;
     QueueHandle_t message_queue_ = nullptr;
     SemaphoreHandle_t mqtt_sem_ = nullptr;
