@@ -133,8 +133,6 @@ bool WebsocketProtocol::OpenAudioChannel() {
     message_cache_ = "";
     websocket_ = Board::GetInstance().CreateWebSocket();
     websocket_->SetHeader("Authorization", token.c_str());
-    websocket_->SetHeader("x-tt-env", "ppe_uplink_opus");
-    websocket_->SetHeader("x-use-ppe", "1");
 
     websocket_->OnData([this](const char* data, size_t len, bool binary) {
         if (!data || len == 0) {

@@ -3,9 +3,10 @@
 
 #include <driver/gpio.h>
 
-#define BOOT_BUTTON_GPIO        GPIO_NUM_9
+#define BOOT_BUTTON_GPIO        GPIO_NUM_3
 
 #define CODEC_TX_GPIO           GPIO_NUM_10
 #define CODEC_RX_GPIO           GPIO_NUM_18
+#define BUILTIN_LED_GPIO        GPIO_NUM_2
 
 #endif // _BOARD_CONFIG_H_

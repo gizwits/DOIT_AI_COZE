@@ -52,6 +52,13 @@ public:
         });
     }
 
+
+    virtual Led* GetLed() override {
+        static SingleLed led(BUILTIN_LED_GPIO);
+        return &led;
+    }
+
+
     virtual AudioCodec* GetAudioCodec() override {
         return &audio_codec;
     }
