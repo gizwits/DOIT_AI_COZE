@@ -5,6 +5,8 @@
 #include <functional>
 #include "board.h"
 #include "http.h"
+#include <cstdint>
+#include "protocols/protocol.h"  // Include protocol.h for RoomParams definition
 
 #define PASSCODE_LEN 10
 #define MAC_LEN 16
@@ -74,8 +76,14 @@ public:
     // 执行Onboarding
     static int32_t activationDevice(std::function<void(mqtt_config_t*)> callback);
 
+    // 获取固件更新信息
+    static int32_t getFirmwareUpdate(const char* hw_version, const char* sw_version, std::function<void(const char*, const char*, const char*)> callback);
+
     // 创建限流token
     static const char* gatCreateLimitToken(uint8_t *szNonce);
+
+    // 获取websocket配置
+    static int32_t getWebsocketConfig(std::function<void(RoomParams*)> callback);
 
 private:
     // 16进制转字符串

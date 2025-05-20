@@ -1,9 +1,9 @@
-
 #include "wifi_board.h"
 #include "audio_codecs/vb6824_audio_codec.h"
 #include "application.h"
 #include "button.h"
 #include "config.h"
+#include "led/single_led.h"
 #include "iot/thing_manager.h"
 
 #include <wifi_station.h>
@@ -42,7 +42,8 @@ public:
         InitializeButtons();
         InitializeIot();
         audio_codec.OnWakeUp([this](const std::string& command) {
-            if (command == "你好小智"){
+            if (command == "你好小智" || command.find("小云") != std::string::npos){
+            // if (command.find("小智") != std::string::npos){
                 if(Application::GetInstance().GetDeviceState() != kDeviceStateListening){
                     Application::GetInstance().WakeWordInvoke("你好小智");
                 }

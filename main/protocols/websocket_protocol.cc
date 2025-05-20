@@ -8,6 +8,7 @@
 #include <esp_log.h>
 #include <arpa/inet.h>
 #include "assets/lang_config.h"
+#include "sentry/error_monitor.h"
 #include "protocols/mcp.h"
 
 #define TAG "WS"
@@ -292,6 +293,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
     });
 
     websocket_->OnDisconnected([this]() {
+        report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "4bo socket disconnected", NULL);
+        
         ESP_LOGI(TAG, "Websocket disconnected");
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
@@ -303,6 +306,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
         SetError(Lang::Strings::SERVER_NOT_FOUND);
         return false;
     }
+
 
     // Wait for server hello
     EventBits_t bits = xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));

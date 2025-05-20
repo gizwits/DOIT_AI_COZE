@@ -10,6 +10,7 @@
 #include "mbedtls/sha256.h"
 #include "auth.h"
 #include "settings.h"
+#include "cJSON.h"
 
 #define TAG "GServer"
 
@@ -463,4 +464,185 @@ char* GServer::get_trace_id() {
     }
     trace_id[32] = '\0';
     return trace_id;
+}
+
+static char* url_decode(const char* src) {
+    char* decoded = strdup(src);
+    if (!decoded) return nullptr;
+    
+    char* dst = decoded;
+    while (*src) {
+        if (*src == '%' && isxdigit(*(src + 1)) && isxdigit(*(src + 2))) {
+            char hex[3] = {src[1], src[2], 0};
+            *dst++ = strtol(hex, nullptr, 16);
+            src += 3;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+    return decoded;
+}
+
+int32_t GServer::getFirmwareUpdate(const char* hw_version, const char* sw_version, std::function<void(const char*, const char*, const char*)> callback) {
+    std::string did = Auth::getInstance().getDeviceId();
+    std::string url = "http://agent.gizwitsapi.com/v2/devices/" + did + "/firmwares";
+    ESP_LOGI(TAG, "Firmware Update URL: %s", url.c_str());
+    ESP_LOGI(TAG, "Hardware Version: %s", hw_version);
+    ESP_LOGI(TAG, "Software Version: %s", sw_version);
+    ESP_LOGI(TAG, "Device ID: %s", did.c_str());
+
+    // 创建token
+    static uint8_t szNonce[PASSCODE_LEN + 1];
+    gatCreatNewPassCode(PASSCODE_LEN, szNonce);
+    const char *token = gatCreateLimitToken(szNonce);
+    ESP_LOGI(TAG, "Token: %s", token);
+
+    // 准备请求体
+    static uint8_t sFirmwareData[128];
+    int len = snprintf((char*)sFirmwareData, sizeof(sFirmwareData) - 1, 
+                      "type=0&hw_version=%s&sw_version=%s", 
+                      hw_version, sw_version);
+    sFirmwareData[len] = '\0';
+    ESP_LOGI(TAG, "Request Body: %s", sFirmwareData);
+    
+    const char *ETag = gatCreateETag(szNonce, sFirmwareData);
+    ESP_LOGI(TAG, "ETag: %s", ETag);
+
+    // 使用Board的HTTP客户端
+    auto& board = Board::GetInstance();
+    auto http = board.CreateHttp();
+    
+    // 设置请求头
+    http->SetHeader("X-Sign-Method", "sha256");
+    http->SetHeader("X-Sign-Nonce", (const char*)szNonce);
+    http->SetHeader("X-Sign-Token", token);
+    http->SetHeader("X-Sign-ETag", ETag);
+    http->SetHeader("X-Trace-Id", get_trace_id());
+    http->SetHeader("Content-Type", "text/plain");
+
+    // 发送PUT请求
+    if (!http->Open("PUT", url, (const char*)sFirmwareData)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        delete http;
+        return -1;
+    }
+
+    std::string response = http->GetBody();
+    delete http;
+    ESP_LOGI(TAG, "Firmware update response: %s", response.c_str());
+
+    // 解析响应
+    char* params = strdup(response.c_str());
+    char* saveptr = nullptr;
+    char* param_token = strtok_r(params, "&", &saveptr);
+    const char* package_type = nullptr;
+    const char* package_md5 = nullptr;
+    const char* package_url = nullptr;
+    char* decoded_url = nullptr;  // Add this to track decoded URL
+
+    while (param_token != nullptr) {
+        if (strncmp(param_token, "package_type=", 13) == 0) {
+            package_type = param_token + 13;
+            ESP_LOGI(TAG, "Package Type: %s", package_type);
+        } else if (strncmp(param_token, "package_md5=", 11) == 0) {
+            package_md5 = param_token + 11;
+            ESP_LOGI(TAG, "Package MD5: %s", package_md5);
+        } else if (strncmp(param_token, "package_url=", 11) == 0) {
+            // Remove the leading '=' if present and decode the URL
+            const char* url_start = param_token + 11;
+            if (url_start[0] == '=') {
+                url_start++;
+            }
+            decoded_url = url_decode(url_start);
+            if (decoded_url) {
+                // Convert https to http if present
+                if (strncmp(decoded_url, "https://", 8) == 0) {
+                    memmove(decoded_url + 4, decoded_url + 5, strlen(decoded_url + 5) + 1);
+                }
+                package_url = decoded_url;
+                ESP_LOGI(TAG, "Package URL (decoded): %s", package_url);
+            } else {
+                package_url = url_start;
+                ESP_LOGI(TAG, "Package URL (raw): %s", package_url);
+            }
+        }
+        param_token = strtok_r(nullptr, "&", &saveptr);
+    }
+
+    if (callback && package_type && package_md5 && package_url) {
+        callback(package_type, package_md5, package_url);
+    }
+
+    if (decoded_url) {  // Free the decoded URL if we allocated it
+        free(decoded_url);
+    }
+    free(params);
+    return 0;
+} 
+
+int32_t GServer::getWebsocketConfig(std::function<void(RoomParams*)> callback) {
+    std::string did = Auth::getInstance().getDeviceId();
+    std::string url = "http://agent.gizwitsapi.com/v3/devices/" + did + "/agent/websocket";
+    ESP_LOGI(TAG, "Websocket config URL: %s", url.c_str());
+
+    // 使用Board的HTTP客户端
+    auto& board = Board::GetInstance();
+    auto http = board.CreateHttp();
+    
+    // 创建token
+    static uint8_t szNonce[PASSCODE_LEN + 1];
+    gatCreatNewPassCode(PASSCODE_LEN, szNonce);
+    const char *token = gatCreateLimitToken(szNonce);
+
+    // 设置请求头
+    http->SetHeader("X-Sign-Method", "sha256");
+    http->SetHeader("X-Sign-Nonce", (const char*)szNonce);
+    http->SetHeader("X-Sign-Token", token);
+    http->SetHeader("X-Trace-Id", get_trace_id());
+
+    ESP_LOGI(TAG, "Websocket config token: %s", token);
+    ESP_LOGI(TAG, "Websocket config nonce: %s", (const char*)szNonce);
+    // 发送GET请求
+    if (!http->Open("GET", url)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
+        delete http;
+        return -1;
+    }
+
+    std::string response = http->GetBody();
+    delete http;
+
+    // 解析JSON响应
+    ESP_LOGI(TAG, "Websocket config response: %s", response.c_str());
+    cJSON *root = cJSON_Parse(response.c_str());
+    if (!root) {
+        ESP_LOGE(TAG, "Failed to parse JSON response");
+        return -1;
+    }
+
+    RoomParams* params = new RoomParams();  // Use value initialization instead of memset
+    
+    // 解析顶层字段
+    cJSON *data = cJSON_GetObjectItem(root, "data");
+    if (data) {
+        // 解析coze_websocket对象
+        cJSON *coze_ws = cJSON_GetObjectItem(data, "coze_websocket");
+        if (coze_ws) {
+            params->api_domain = cJSON_GetObjectItem(coze_ws, "api_domain")->valuestring;
+            params->access_token = cJSON_GetObjectItem(coze_ws, "access_token")->valuestring;
+            params->bot_id = cJSON_GetObjectItem(coze_ws, "bot_id")->valuestring;
+            params->voice_id = cJSON_GetObjectItem(coze_ws, "voice_id")->valuestring;
+            params->conv_id = cJSON_GetObjectItem(coze_ws, "conv_id")->valuestring;
+        }
+    }
+
+    cJSON_Delete(root);
+
+    if (callback) {
+        callback(params);
+    }
+
+    delete params;
+    return 0;
 } 

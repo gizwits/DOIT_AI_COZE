@@ -16,6 +16,8 @@
 #include <cJSON.h>
 #include <driver/gpio.h>
 #include <arpa/inet.h>
+#include <esp_wifi.h>
+#include <esp_wifi_types.h>
 
 #define TAG "Application"
 
@@ -434,13 +436,79 @@ void Application::Start() {
         return;
     }
 
+    // Settings settings("wifi", true);
+    // bool need_activation = settings.GetInt("need_activation");
+    // bool has_authkey = !Auth::getInstance().getAuthKey().empty();
+
+    // if(need_activation == 1) {
+    //     if (!has_authkey) {
+    //         GServer::activationLimitDevice([this, &settings](mqtt_config_t* config) {
+    //             ESP_LOGI(TAG, "Device ID: %s", config->device_id);
+    //             settings.SetString("did", config->device_id);
+    //             settings.SetInt("need_activation", 0);
+    //             GServer::getWebsocketConfig([this](RoomParams* config) {
+    //                 if (config) {
+    //                     protocol_->UpdateRoomParams(*config);
+    //                 }
+    //             });
+    //         });
+    //     } else {
+    //         GServer::activationDevice([this, &settings](mqtt_config_t* config) {
+    //             settings.SetInt("need_activation", 0);
+    //             GServer::getWebsocketConfig([this](RoomParams* config) {
+    //                 if (config) {
+    //                     protocol_->UpdateRoomParams(*config);
+    //                 }
+    //             });
+    //         });
+    //     }
+    // } else {
+    //     GServer::getWebsocketConfig([this](RoomParams* config) {
+    //         if (config) {
+    //             protocol_->UpdateRoomParams(*config);
+    //         }
+    //     });
+    // }
+
+    // if (!has_authkey) {
+    //     if (need_activation == 1) {
+    //         GServer::activationLimitDevice([this, &settings](mqtt_config_t* config) {
+    //             ESP_LOGI(TAG, "Device ID: %s", config->device_id);
+    //             settings.SetString("did", config->device_id);
+    //             settings.SetInt("need_activation", 0);
+    //             GServer::getWebsocketConfig([this](RoomParams* config) {
+    //                 if (config) {
+    //                     protocol_->UpdateRoomParams(*config);
+    //                 }
+    //             });
+    //         });
+            
+    //     } else {
+            
+    //     }
+        
+    // } else {
+    //     if (need_activation == 1) {
+    //         ESP_LOGI(TAG, "need_activation is true");
+    //         // 调用注册
+    //         GServer::activationDevice([this, &settings](mqtt_config_t* config) {
+    //             settings.SetInt("need_activation", 0);
+    //             GServer::getWebsocketConfig([this](RoomParams* config) {
+    //                 if (config) {
+    //                     protocol_->UpdateRoomParams(*config);
+    //                 }
+    //             });
+    //         });
+    //     }
+    // }
+
     // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {
         SetDeviceState(kDeviceStateIdle);
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
     });
     protocol_->OnIncomingAudio([this](std::vector<uint8_t>&& data) {
-        const int max_packets_in_queue = 1300 / OPUS_FRAME_DURATION_MS;
+        const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
         std::lock_guard<std::mutex> lock(mutex_);
         if (audio_decode_queue_.size() < max_packets_in_queue) {
             audio_decode_queue_.emplace_back(std::move(data));
@@ -637,6 +705,12 @@ void Application::OnClockTimer() {
         int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         int min_free_sram = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
         ESP_LOGI(TAG, "Free internal: %u minimal internal: %u", free_sram, min_free_sram);
+
+        // Print RSSI
+        wifi_ap_record_t ap_info;
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            ESP_LOGI(TAG, "WiFi RSSI: %d dBm", ap_info.rssi);
+        }
 
 #if 0
         char pcWriteBuffer[1024];
@@ -1040,6 +1114,7 @@ void Application::Reboot() {
 }
 
 void Application::WakeWordInvoke(const std::string& wake_word) {
+
     if (device_state_ == kDeviceStateIdle) {
         ToggleChatState();
         Schedule([this, wake_word]() {
