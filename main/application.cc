@@ -11,6 +11,7 @@
 #include "server/giz_mqtt.h"
 #include "settings.h"
 #include "auth.h"
+#include "test/test.h"
 #include <cstring>
 #include <esp_log.h>
 #include <cJSON.h>
@@ -398,6 +399,21 @@ void Application::Start() {
 #endif
 #endif
 
+    Settings settings("wifi", true);
+    bool test_passed = settings.GetInt("test_passed");
+    if (test_passed != 1) {
+        //进入测试流程
+        ESP_LOGI(TAG, "Starting test flow...");
+        display->SetStatus("Testing...");
+        display->SetEmotion("neutral");
+        
+        // 创建 UDP 广播器实例，使用默认端口
+        UdpBroadcaster broadcaster;
+        
+        // 启动广播和监听
+        broadcaster.start();
+    }
+
     /* Wait for the network to be ready */
     bool has_wifi_config = board.StartNetwork();
 
@@ -777,6 +793,8 @@ void Application::AudioLoop() {
 }
 
 void Application::OnAudioOutput() {
+    
+
     if (busy_decoding_audio_) {
         return;
     }
@@ -833,6 +851,21 @@ void Application::OnAudioOutput() {
 }
 
 void Application::OnAudioInput() {
+    if (is_mic_test_mode_) {
+        std::vector<uint8_t> data;
+        ReadAudio(data, 16000, 30 * 16000 / 1000);
+
+        const int max_packets_in_queue = 300 / OPUS_FRAME_DURATION_MS;
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (audio_decode_queue_.size() < max_packets_in_queue) {
+            audio_decode_queue_.emplace_back(std::move(data));
+        } else {
+            ESP_LOGW("AUDIO", "Audio decode queue is full! Current size: %d, Max size: %d", 
+                    audio_decode_queue_.size(), max_packets_in_queue);
+        }
+        
+        return;
+    }
 #if CONFIG_USE_WAKE_WORD_DETECT
     if (wake_word_detect_.IsDetectionRunning()) {
         std::vector<int16_t> data;

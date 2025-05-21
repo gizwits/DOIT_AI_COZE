@@ -11,6 +11,7 @@
 #include <list>
 #include <vector>
 #include <condition_variable>
+#include <functional>
 
 #include <opus_encoder.h>
 #include <opus_decoder.h>
@@ -74,6 +75,19 @@ public:
     void WakeWordInvoke(const std::string& wake_word);
     void PlaySound(const std::string_view& sound);
     bool CanEnterSleepMode();
+    void ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
+#ifdef CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS
+    void ReadAudio(std::vector<uint8_t>& opus, int sample_rate, int samples);
+#endif
+    void WriteAudio(std::vector<int16_t>& data, int sample_rate);
+#ifdef CONFIG_USE_AUDIO_CODEC_DECODE_OPUS
+    void WriteAudio(std::vector<uint8_t>& opus, int sample_rate);
+#endif
+    std::unique_ptr<OpusDecoderWrapper> opus_decoder_;
+    // 设置测试模式
+    void SetMicTestMode(bool enabled) {
+        is_mic_test_mode_ = enabled;
+    }
 
 private:
     Application();
@@ -114,23 +128,17 @@ private:
     std::condition_variable audio_decode_cv_;
 
     std::unique_ptr<OpusEncoderWrapper> opus_encoder_;
-    std::unique_ptr<OpusDecoderWrapper> opus_decoder_;
 
     OpusResampler input_resampler_;
     OpusResampler reference_resampler_;
     OpusResampler output_resampler_;
 
+    bool is_mic_test_mode_ = false;
+
     void MainEventLoop();
     void OnAudioInput();
     void OnAudioOutput();
-    void ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
-#ifdef CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS
-    void ReadAudio(std::vector<uint8_t>& opus, int sample_rate, int samples);
-#endif
-    void WriteAudio(std::vector<int16_t>& data, int sample_rate);
-#ifdef CONFIG_USE_AUDIO_CODEC_DECODE_OPUS
-    void WriteAudio(std::vector<uint8_t>& opus, int sample_rate);
-#endif
+
     void ResetDecoder();
     void SetDecodeSampleRate(int sample_rate, int frame_duration);
     void CheckNewVersion();
