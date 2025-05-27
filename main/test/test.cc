@@ -234,7 +234,7 @@ void UdpBroadcaster::broadcast_thread() {
         // 将 JSON 对象转换为字符串
         char *json_str = cJSON_PrintUnformatted(root);
         if (json_str) {
-            // ESP_LOGI(TAG, "Broadcasting: %s", json_str);
+            ESP_LOGE(TAG, "Broadcasting");
             
             // 发送数据
             if (sendto(broadcast_socket_, json_str, strlen(json_str), 0,

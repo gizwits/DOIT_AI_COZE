@@ -5,7 +5,10 @@
 #include "config.h"
 #include "led/single_led.h"
 #include "iot/thing_manager.h"
-
+#include <esp_sleep.h>
+#include "power_save_timer.h"
+#include <driver/rtc_io.h>
+#include "driver/gpio.h"
 #include <wifi_station.h>
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
@@ -16,8 +19,38 @@
 class CustomBoard : public WifiBoard {
 private:
     Button boot_button_;
+    PowerSaveTimer* power_save_timer_;
     VbAduioCodec audio_codec;
 
+    void InitializePowerSaveTimer() {
+        // 配置 BOOT 按钮为输入模式，启用上拉
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << BOOT_BUTTON_GPIO),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        gpio_config(&io_conf);
+
+        power_save_timer_ = new PowerSaveTimer(-1, 60 * 1, 60 * 2);
+        power_save_timer_->OnEnterSleepMode([this]() {
+            ESP_LOGI(TAG, "Enabling sleep mode");
+        });
+        power_save_timer_->OnExitSleepMode([this]() {
+        });
+        power_save_timer_->OnShutdownRequest([this]() {
+            ESP_LOGI(TAG, "Shutting down");
+            run_sleep_mode();
+        });
+        power_save_timer_->SetEnabled(true);
+    }
+    void run_sleep_mode(){
+        // 配置唤醒源
+        esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);
+        gpio_set_level(BUILTIN_LED_GPIO, 0);
+        esp_deep_sleep_start();
+    }
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
@@ -29,6 +62,9 @@ private:
                 ResetWifiConfiguration();
             }
         });
+        boot_button_.OnLongPress([this]() {
+            run_sleep_mode();
+        });
     }
 
     // 物联网初始化，添加对 AI 可见设备
@@ -38,7 +74,8 @@ private:
     }
 
 public:
-    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){          
+    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){   
+        InitializePowerSaveTimer();       
         InitializeButtons();
         InitializeIot();
         audio_codec.OnWakeUp([this](const std::string& command) {

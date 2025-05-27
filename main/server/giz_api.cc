@@ -495,7 +495,7 @@ int32_t GServer::getFirmwareUpdate(const char* hw_version, const char* sw_versio
     // 创建token
     static uint8_t szNonce[PASSCODE_LEN + 1];
     gatCreatNewPassCode(PASSCODE_LEN, szNonce);
-    const char *token = gatCreateLimitToken(szNonce);
+    const char *token = gatCreateToken(szNonce);
     ESP_LOGI(TAG, "Token: %s", token);
 
     // 准备请求体
