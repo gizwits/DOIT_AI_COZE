@@ -1149,6 +1149,7 @@ void Application::Reboot() {
 void Application::WakeWordInvoke(const std::string& wake_word) {
 
     if (device_state_ == kDeviceStateIdle) {
+        PlaySound(Lang::Sounds::P3_VIBRATION);
         ToggleChatState();
         Schedule([this, wake_word]() {
             if (protocol_) {

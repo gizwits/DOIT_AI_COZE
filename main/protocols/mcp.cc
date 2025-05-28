@@ -135,6 +135,7 @@ void CozeMCPParser::handle_mcp(std::string_view data) {
             //                         "{\\\"music_play_results\\\": \\\"1\\\"}");
         }
     } else if (strcmp(name->valuestring, "sleep_control") == 0) {
+        
     } else if (strcmp(name->valuestring, "brightness") == 0) {
         cJSON *brightness = cJSON_GetObjectItem(args_json, "brightness");
         if (brightness && cJSON_IsNumber(brightness)) {

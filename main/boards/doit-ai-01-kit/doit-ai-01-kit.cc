@@ -11,6 +11,8 @@
 #include "driver/gpio.h"
 #include <wifi_station.h>
 #include <esp_log.h>
+#include "assets/lang_config.h"
+
 #include <esp_lcd_panel_vendor.h>
 #include <driver/spi_common.h>
 
@@ -21,6 +23,8 @@ private:
     Button boot_button_;
     PowerSaveTimer* power_save_timer_;
     VbAduioCodec audio_codec;
+    SingleLed led_;
+    bool sleep_flag_ = false;
 
     void InitializePowerSaveTimer() {
         // 配置 BOOT 按钮为输入模式，启用上拉
@@ -41,14 +45,20 @@ private:
         });
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
-            run_sleep_mode();
+            run_sleep_mode(false);
         });
         power_save_timer_->SetEnabled(true);
     }
-    void run_sleep_mode(){
+    void run_sleep_mode(bool need_delay = true){
+        auto& application = Application::GetInstance();
+        application.SetDeviceState(kDeviceStateIdle);
+        application.PlaySound(Lang::Sounds::P3_LOW_BATTERY);
+        if(need_delay){
+            vTaskDelay(pdMS_TO_TICKS(3000));
+        }
+        gpio_set_level(BUILTIN_LED_GPIO, 0);
         // 配置唤醒源
         esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);
-        gpio_set_level(BUILTIN_LED_GPIO, 0);
         esp_deep_sleep_start();
     }
 
@@ -57,13 +67,18 @@ private:
             auto &app = Application::GetInstance();
             app.ToggleChatState();
         });
+        boot_button_.OnPressUp([this]() {
+            if(sleep_flag_){
+                run_sleep_mode(false);
+            }
+        });
         boot_button_.OnPressRepeat([this](uint16_t count) {
             if(count >= 3){
                 ResetWifiConfiguration();
             }
         });
         boot_button_.OnLongPress([this]() {
-            run_sleep_mode();
+            sleep_flag_ = true;
         });
     }
 
@@ -74,7 +89,7 @@ private:
     }
 
 public:
-    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){   
+    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO), led_(BUILTIN_LED_GPIO) {   
         InitializePowerSaveTimer();       
         InitializeButtons();
         InitializeIot();
@@ -92,8 +107,7 @@ public:
 
 
     virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
-        return &led;
+        return &led_;
     }
 
 
