@@ -433,6 +433,7 @@ void Application::Start() {
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
     mqtt_client_ = std::make_unique<MqttClient>();
     mqtt_client_->OnRoomParamsUpdated([this](const RoomParams& params) {
+        
         protocol_->UpdateRoomParams(params);
         // 判断 protocol_ 是否启动
         // 如果启动了，就断开重新连接
@@ -445,6 +446,8 @@ void Application::Start() {
         } else {
             // 没有连接的情况下，不用动，按照小智的流程，等待下一个触发点
         }
+        // 获取到 才响
+        PlaySound(Lang::Sounds::P3_SUCCESS);
     });
     if (!mqtt_client_->initialize()) {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");
@@ -704,7 +707,7 @@ void Application::Start() {
         display->SetChatMessage("system", "");
         // Play the success sound to indicate the device is ready
         ResetDecoder();
-        PlaySound(Lang::Sounds::P3_SUCCESS);
+        // PlaySound(Lang::Sounds::P3_SUCCESS);
     }
     
     // Enter the main event loop
@@ -1149,7 +1152,7 @@ void Application::Reboot() {
 void Application::WakeWordInvoke(const std::string& wake_word) {
 
     if (device_state_ == kDeviceStateIdle) {
-        PlaySound(Lang::Sounds::P3_VIBRATION);
+        PlaySound(Lang::Sounds::P3_SUCCESS);
         ToggleChatState();
         Schedule([this, wake_word]() {
             if (protocol_) {
