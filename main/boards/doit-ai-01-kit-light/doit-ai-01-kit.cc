@@ -5,7 +5,6 @@
 #include "config.h"
 #include "led/circular_strip.h"
 #include "led/gpio_led.h"
-#include "led/single_led.h"
 #include "iot/thing_manager.h"
 #include <esp_sleep.h>
 #include "power_save_timer.h"
@@ -25,9 +24,21 @@ private:
     Button boot_button_;
     PowerSaveTimer* power_save_timer_;
     VbAduioCodec audio_codec;
+    GpioLed led_;
     bool sleep_flag_ = false;
+    static CircularStrip* led_strip_;  // 添加静态成员变量
 
     void InitializePowerSaveTimer() {
+        // 配置 BOOT 按钮为输入模式，启用上拉
+        gpio_config_t io_conf = {
+            .pin_bit_mask = (1ULL << BOOT_BUTTON_GPIO),
+            .mode = GPIO_MODE_INPUT,
+            .pull_up_en = GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type = GPIO_INTR_DISABLE
+        };
+        gpio_config(&io_conf);
+
         power_save_timer_ = new PowerSaveTimer(-1, 60 * 1, 60 * 2);
         power_save_timer_->OnEnterSleepMode([this]() {
             ESP_LOGI(TAG, "Enabling sleep mode");
@@ -48,6 +59,7 @@ private:
         if(need_delay){
             vTaskDelay(pdMS_TO_TICKS(3000));
         }
+        led_.TurnOff();
         // 配置唤醒源
         esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);
         esp_deep_sleep_start();
@@ -80,10 +92,16 @@ private:
     }
 
 public:
-    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){      
+    CustomBoard() : 
+        boot_button_(BOOT_BUTTON_GPIO), 
+        audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO),
+        led_(BUILTIN_LED_GPIO)  // 使用 BUILTIN_LED_GPIO 初始化 SingleLed
+    {   
         InitializePowerSaveTimer();       
         InitializeButtons();
         InitializeIot();
+        led_.SetBrightness(10);  // 设置蓝色，亮度为10
+        led_.TurnOn();  // 点亮LED
 
         audio_codec.OnWakeUp([this](const std::string& command) {
             if (command == "你好小智" || command.find("小云") != std::string::npos){
@@ -96,9 +114,8 @@ public:
             }
         });
     }
-
     virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
+        static CircularStrip led(BUILTIN_LED_STRIP_GPIO, BUILTIN_LED_NUM);
         return &led;
     }
 
