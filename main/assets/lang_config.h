@@ -184,6 +184,13 @@ namespace Lang {
         static_cast<size_t>(p3_low_battery_end - p3_low_battery_start)
         };
 
+        extern const char p3_mute_start[] asm("_binary_mute_p3_start");
+        extern const char p3_mute_end[] asm("_binary_mute_p3_end");
+        static const std::string_view P3_MUTE {
+        static_cast<const char*>(p3_mute_start),
+        static_cast<size_t>(p3_mute_end - p3_mute_start)
+        };
+
         extern const char p3_sleep_start[] asm("_binary_sleep_p3_start");
         extern const char p3_sleep_end[] asm("_binary_sleep_p3_end");
         static const std::string_view P3_SLEEP {

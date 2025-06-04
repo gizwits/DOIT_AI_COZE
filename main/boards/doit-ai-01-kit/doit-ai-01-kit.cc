@@ -44,9 +44,11 @@ private:
     void run_sleep_mode(bool need_delay = true){
         auto& application = Application::GetInstance();
         application.SetDeviceState(kDeviceStateIdle);
-        application.PlaySound(Lang::Sounds::P3_LOW_BATTERY);
+        application.PlaySound(Lang::Sounds::P3_SLEEP);
         if(need_delay){
             vTaskDelay(pdMS_TO_TICKS(3000));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(2000));
         }
         // 配置唤醒源
         esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);

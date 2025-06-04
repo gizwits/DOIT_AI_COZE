@@ -297,6 +297,7 @@ void Application::ToggleChatState() {
     } else if (device_state_ == kDeviceStateListening) {
         Schedule([this]() {
             protocol_->CloseAudioChannel();
+            
         });
     }
 }
@@ -1174,8 +1175,9 @@ void Application::Reboot() {
 void Application::WakeWordInvoke(const std::string& wake_word) {
 
     if (device_state_ == kDeviceStateIdle) {
+        vTaskDelay(pdMS_TO_TICKS(300));
         PlaySound(Lang::Sounds::P3_SUCCESS);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(300));
         ToggleChatState();
         Schedule([this, wake_word]() {
             if (protocol_) {
@@ -1190,6 +1192,8 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
         Schedule([this]() {
             if (protocol_) {
                 protocol_->CloseAudioChannel();
+                vTaskDelay(pdMS_TO_TICKS(500));
+                PlaySound(Lang::Sounds::P3_MUTE);
             }
         });
     }
