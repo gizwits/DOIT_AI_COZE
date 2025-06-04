@@ -12,6 +12,7 @@
 #include "settings.h"
 #include "auth.h"
 #include "test/test.h"
+#include "watchdog.h"
 #include <cstring>
 #include <esp_log.h>
 #include <cJSON.h>
@@ -19,6 +20,7 @@
 #include <arpa/inet.h>
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
+#include <esp_task_wdt.h>
 
 #define TAG "Application"
 
@@ -349,6 +351,10 @@ void Application::StopListening() {
 }
 
 void Application::Start() {
+    // 初始化看门狗
+    auto& watchdog = Watchdog::GetInstance();
+    watchdog.Initialize(10, true);  // 10秒超时，超时后触发系统复位
+    
     auto& board = Board::GetInstance();
     Auth::getInstance().init();
 
@@ -387,6 +393,9 @@ void Application::Start() {
 
     xTaskCreatePinnedToCore([](void* arg) {
         Application* app = (Application*)arg;
+        // 订阅音频任务到看门狗
+        auto& watchdog = Watchdog::GetInstance();
+        watchdog.SubscribeTask(xTaskGetCurrentTaskHandle());
         app->AudioLoop();
         vTaskDelete(NULL);
 #ifdef CONFIG_IDF_TARGET_ESP32C2
@@ -442,12 +451,12 @@ void Application::Start() {
             Schedule([this]() {
                 protocol_->SendAbortSpeaking(kAbortReasonNone);
                 protocol_->CloseAudioChannel();
+                PlaySound(Lang::Sounds::P3_SUCCESS);
             });
         } else {
             // 没有连接的情况下，不用动，按照小智的流程，等待下一个触发点
+            PlaySound(Lang::Sounds::P3_SUCCESS);
         }
-        // 获取到 才响
-        PlaySound(Lang::Sounds::P3_SUCCESS);
     });
     if (!mqtt_client_->initialize()) {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");
@@ -784,7 +793,12 @@ void Application::MainEventLoop() {
 // The Audio Loop is used to input and output audio data
 void Application::AudioLoop() {
     auto codec = Board::GetInstance().GetAudioCodec();
+    auto& watchdog = Watchdog::GetInstance();
+    
     while (true) {
+        // 喂狗
+        watchdog.Reset();
+        
         OnAudioInput();
         if (codec->output_enabled()) {
             OnAudioOutput();

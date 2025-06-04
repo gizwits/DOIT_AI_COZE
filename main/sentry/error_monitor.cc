@@ -299,27 +299,27 @@ esp_err_t error_monitor_init(void) {
 
 esp_err_t report_error(error_type_t type, error_level_t level, 
                       const char* message, const char* stack) {
-    auto params = std::make_unique<ErrorReportParams>();
-    params->type = type;
-    params->level = level;
-    if (message) params->message = message;
-    if (stack) params->stack = stack;
+    // auto params = std::make_unique<ErrorReportParams>();
+    // params->type = type;
+    // params->level = level;
+    // if (message) params->message = message;
+    // if (stack) params->stack = stack;
     
-    BaseType_t result = xTaskCreate(
-        report_error_task,
-        "report_error",
-        8192 / 2,
-        params.release(),
-        5,
-        NULL
-    );
+    // BaseType_t result = xTaskCreate(
+    //     report_error_task,
+    //     "report_error",
+    //     8192 / 2,
+    //     params.release(),
+    //     5,
+    //     NULL
+    // );
     
-    if (result != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create error report task");
-        return ESP_FAIL;
-    }
+    // if (result != pdPASS) {
+    //     ESP_LOGE(TAG, "Failed to create error report task");
+    //     return ESP_FAIL;
+    // }
     
-    ESP_LOGI(TAG, "Error report task created successfully");
+    // ESP_LOGI(TAG, "Error report task created successfully");
     return ESP_OK;
 }
 
