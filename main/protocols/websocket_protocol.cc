@@ -113,6 +113,9 @@ bool WebsocketProtocol::IsAudioChannelOpened() const {
 
 void WebsocketProtocol::CloseAudioChannel() {
     if (websocket_ != nullptr) {
+        // Send close frame to server
+        websocket_->Close();
+        vTaskDelay(pdMS_TO_TICKS(500));
         delete websocket_;
         websocket_ = nullptr;
     }

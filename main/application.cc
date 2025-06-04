@@ -426,6 +426,8 @@ void Application::Start() {
     /* Wait for the network to be ready */
     bool has_wifi_config = board.StartNetwork();
 
+    PlaySound(Lang::Sounds::P3_CONNECT_SUCCESS);
+
     // Check for new firmware version or get the MQTT broker address
     CheckNewVersion();
 
@@ -443,20 +445,26 @@ void Application::Start() {
     mqtt_client_ = std::make_unique<MqttClient>();
     mqtt_client_->OnRoomParamsUpdated([this](const RoomParams& params) {
         
-        protocol_->UpdateRoomParams(params);
         // 判断 protocol_ 是否启动
         // 如果启动了，就断开重新连接
         if (protocol_->IsAudioChannelOpened()) {
             // 先停止所有正在进行的操作
             Schedule([this]() {
                 protocol_->SendAbortSpeaking(kAbortReasonNone);
+                SetDeviceState(kDeviceStateIdle);
+                vTaskDelay(pdMS_TO_TICKS(500));
                 protocol_->CloseAudioChannel();
-                PlaySound(Lang::Sounds::P3_SUCCESS);
+                PlaySound(Lang::Sounds::P3_CONFIG_SUCCESS);
             });
         } else {
             // 没有连接的情况下，不用动，按照小智的流程，等待下一个触发点
-            PlaySound(Lang::Sounds::P3_SUCCESS);
+            // 如果是第一次获取到配置，则不需要提示
+            if (!protocol_->GetRoomParams().access_token.empty()) {
+                PlaySound(Lang::Sounds::P3_CONFIG_SUCCESS);
+            }
         }
+        protocol_->UpdateRoomParams(params);
+
     });
     if (!mqtt_client_->initialize()) {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");

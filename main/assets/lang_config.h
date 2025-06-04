@@ -135,6 +135,27 @@ namespace Lang {
         static_cast<size_t>(p3_activation_end - p3_activation_start)
         };
 
+        extern const char p3_config_success_start[] asm("_binary_config_success_p3_start");
+        extern const char p3_config_success_end[] asm("_binary_config_success_p3_end");
+        static const std::string_view P3_CONFIG_SUCCESS {
+        static_cast<const char*>(p3_config_success_start),
+        static_cast<size_t>(p3_config_success_end - p3_config_success_start)
+        };
+
+        extern const char p3_connect_success_start[] asm("_binary_connect_success_p3_start");
+        extern const char p3_connect_success_end[] asm("_binary_connect_success_p3_end");
+        static const std::string_view P3_CONNECT_SUCCESS {
+        static_cast<const char*>(p3_connect_success_start),
+        static_cast<size_t>(p3_connect_success_end - p3_connect_success_start)
+        };
+
+        extern const char p3_connecting_start[] asm("_binary_connecting_p3_start");
+        extern const char p3_connecting_end[] asm("_binary_connecting_p3_end");
+        static const std::string_view P3_CONNECTING {
+        static_cast<const char*>(p3_connecting_start),
+        static_cast<size_t>(p3_connecting_end - p3_connecting_start)
+        };
+
         extern const char p3_err_pin_start[] asm("_binary_err_pin_p3_start");
         extern const char p3_err_pin_end[] asm("_binary_err_pin_p3_end");
         static const std::string_view P3_ERR_PIN {
@@ -161,6 +182,13 @@ namespace Lang {
         static const std::string_view P3_LOW_BATTERY {
         static_cast<const char*>(p3_low_battery_start),
         static_cast<size_t>(p3_low_battery_end - p3_low_battery_start)
+        };
+
+        extern const char p3_sleep_start[] asm("_binary_sleep_p3_start");
+        extern const char p3_sleep_end[] asm("_binary_sleep_p3_end");
+        static const std::string_view P3_SLEEP {
+        static_cast<const char*>(p3_sleep_start),
+        static_cast<size_t>(p3_sleep_end - p3_sleep_start)
         };
 
         extern const char p3_success_start[] asm("_binary_success_p3_start");

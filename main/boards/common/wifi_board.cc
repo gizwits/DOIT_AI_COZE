@@ -109,7 +109,8 @@ Http* WifiBoard::CreateHttp() {
 }
 
 WebSocket* WifiBoard::CreateWebSocket() {
-    return new WebSocket(new TcpTransport());
+    auto transport = new TcpTransport();
+    return new WebSocket(transport);
 }
 
 Mqtt* WifiBoard::CreateMqtt() {
