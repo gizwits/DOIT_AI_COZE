@@ -54,6 +54,7 @@ public:
     int sendResetToCloud();
     int getPublishedId();
     void OnRoomParamsUpdated(std::function<void(const RoomParams&)> callback);
+    void sendOtaProgressReport(int progress, const char* status);
     void deinit();
 
     MqttClient() = default;

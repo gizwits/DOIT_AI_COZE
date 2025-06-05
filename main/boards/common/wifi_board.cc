@@ -38,13 +38,24 @@ std::string WifiBoard::GetBoardType() {
     return "wifi";
 }
 
+void OnWifiConfigEvent(WifiConfigEvent event, const std::string& message) {
+    switch (event) {
+        case WifiConfigEvent::CONFIG_PACKET_RECEIVED:
+            ESP_LOGI("APP", "收到配置包: %s", message.c_str());
+            break;
+    }
+}
+
 void WifiBoard::EnterWifiConfigMode() {
     auto& application = Application::GetInstance();
     application.SetDeviceState(kDeviceStateWifiConfiguring);
 
     // 初始化 WiFi模块
 
-    WifiConfiguration::GetInstance().Initialize(Auth::getInstance().getProductKey(), "XPG-GAgent");
+    auto& wifi_config = WifiConfiguration::GetInstance();
+    wifi_config.RegisterCallback(OnWifiConfigEvent);
+
+    wifi_config.Initialize(Auth::getInstance().getProductKey(), "XPG-GAgent");
     std::string hint = Lang::Strings::OPEN_MINI_APP;
     hint += "\n\n";
     application.Alert(Lang::Strings::WIFI_CONFIG_MODE, hint.c_str(), "", Lang::Sounds::P3_WIFICONFIG);
@@ -166,7 +177,11 @@ void WifiBoard::ResetWifiConfiguration() {
         settings.SetInt("force_ap", 1);
     }
     GetDisplay()->ShowNotification(Lang::Strings::ENTERING_WIFI_CONFIG_MODE);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    // 通过 mqtt 发送重置
+    // 有歧义，小智的逻辑，重置是不清除上一个 ssid 的
+    // MqttClient::getInstance().sendResetToCloud();
+    // vTaskDelay(pdMS_TO_TICKS(1000));
     // Reboot the device
     esp_restart();
 }

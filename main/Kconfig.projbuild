@@ -138,6 +138,10 @@ choice BOARD_TYPE
         bool "元控·青春"
     config BOARD_TYPE_DOIT_AI_01_KIT
         bool "Doit-AI-01-Kit"
+    config BOARD_TYPE_DOIT_AI_01_KIT_LIGHT
+        bool "Doit-AI-01-Kit-light"
+    config BOARD_TYPE_DOIT_AI_01_KIT_BUTTON
+        bool "Doit-AI-01-Kit-button"
     config BOARD_TYPE_DOIT_AI_01_KIT_LCD
         bool "Doit-AI-01-Kit-lcd"
 endchoice
@@ -264,20 +268,36 @@ config USE_AUDIO_PROCESSOR
     help
         需要 ESP32 S3 与 AFE 支持
 
-config USE_REALTIME_CHAT
-    bool "启用可语音打断的实时对话模式（需要 AEC 支持）"
-    default n
-    depends on (BOARD_TYPE_DOIT_AI_01_KIT || BOARD_TYPE_DOIT_AI_01_KIT_LCD) || (USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP_BOX_3 || BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_LITE || BOARD_TYPE_LICHUANG_DEV || BOARD_TYPE_ESP32S3_KORVO2_V3))
+
+choice CHAT_MODE
+    prompt "对话模式选择"
+    default CHAT_MODE_NONE
     help
-        需要 ESP32 S3 与 AEC 开启，因为性能不够，不建议和微信聊天界面风格同时开启
+        选择一种对话模式
+
+    config USE_CHAT_MODE_NONE
+        bool "无特殊对话模式"
+        help
+            不启用任何特殊对话模式
+
+    config USE_REALTIME_CHAT
+        bool "可语音打断的实时对话模式（需要 AEC 支持）"
+        depends on (BOARD_TYPE_DOIT_AI_01_KIT || BOARD_TYPE_DOIT_AI_01_KIT_LCD) || (USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP_BOX_3 || BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_LITE || BOARD_TYPE_LICHUANG_DEV || BOARD_TYPE_ESP32S3_KORVO2_V3))
+        help
+            需要 ESP32 S3 与 AEC 开启，因为性能不够，不建议和微信聊天界面风格同时开启
+
+    config UES_CHAT_MODE_BUTTON
+        bool "按钮对话"
+        help
+            按钮对话，按下按钮开始录音，松开按钮结束录音
+
+endchoice
 
 config USE_AUDIO_CODEC_ENCODE_OPUS
-    depends on BOARD_TYPE_DOIT_AI_01_KIT || BOARD_TYPE_DOIT_AI_01_KIT_LCD
     bool "use audio codec encode opus"
     default y
 
 config USE_AUDIO_CODEC_DECODE_OPUS
-    depends on BOARD_TYPE_DOIT_AI_01_KIT || BOARD_TYPE_DOIT_AI_01_KIT_LCD
     bool "use audio codec decode opus"
     default n
 endmenu

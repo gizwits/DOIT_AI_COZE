@@ -1173,7 +1173,10 @@ void Application::Reboot() {
 }
 
 void Application::WakeWordInvoke(const std::string& wake_word) {
-
+#ifdef CONFIG_UES_CHAT_MODE_BUTTON
+    ESP_LOGI(TAG, "Wake word invoke");
+    return;
+#else
     if (device_state_ == kDeviceStateIdle) {
         vTaskDelay(pdMS_TO_TICKS(300));
         PlaySound(Lang::Sounds::P3_SUCCESS);
@@ -1197,6 +1200,7 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
             }
         });
     }
+#endif
 }
 
 bool Application::CanEnterSleepMode() {

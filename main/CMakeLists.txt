@@ -20,6 +20,7 @@ set(SOURCES "audio_codecs/audio_codec.cc"
             "iot/thing_manager.cc"
             "server/giz_mqtt.cc"
             "server/giz_api.cc"
+            "server/protocol/ota_protocol.cc"
             "server/protocol/iot_protocol.cc"
             "protocols/mcp.cc"
             "auth.cc"
@@ -153,6 +154,10 @@ elseif(CONFIG_BOARD_TYPE_ESP32_CGC)
     set(BOARD_TYPE "esp32-cgc")
 elseif(CONFIG_BOARD_TYPE_DOIT_AI_01_KIT)
     set(BOARD_TYPE "doit-ai-01-kit")
+elseif(CONFIG_BOARD_TYPE_DOIT_AI_01_KIT_BUTTON)
+    set(BOARD_TYPE "doit-ai-01-kit-button")
+elseif(CONFIG_BOARD_TYPE_DOIT_AI_01_KIT_LIGHT)
+    set(BOARD_TYPE "doit-ai-01-kit-light")
 elseif(CONFIG_BOARD_TYPE_DOIT_AI_01_KIT_LCD)
     set(BOARD_TYPE "doit-ai-01-kit-lcd")
 endif()

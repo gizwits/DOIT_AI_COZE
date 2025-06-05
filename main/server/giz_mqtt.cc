@@ -4,11 +4,13 @@
 #include <esp_log.h>
 #include <ml307_mqtt.h>
 #include "protocol/iot_protocol.h"
+#include "protocol/ota_protocol.h"
 #include <cstring>
 #include "auth.h"
 #include <arpa/inet.h>
 #include "application.h"
 #include "settings.h"
+#include <esp_app_desc.h>
 
 #define TAG "GIZ_MQTT"
 
@@ -298,6 +300,49 @@ int MqttClient::sendResetToCloud() {
 
 int MqttClient::getPublishedId() {
     return mqtt_published_id_;
+}
+
+void MqttClient::sendOtaProgressReport(int progress, const char* status) {
+    if (mqtt_ == nullptr || mqtt_event_ == 0) {
+        ESP_LOGE(TAG, "MQTT client not initialized");
+        return;
+    }
+
+    uint8_t buf[256] = {0};
+    
+    // 获取当前版本信息
+    auto app_desc = esp_app_get_description();
+    std::string sw_version = app_desc->version;
+    std::string hw_version = BOARD_NAME;
+    
+    // 使用协议函数打包消息
+    size_t total_len = ota::protocol::pack_mqtt_upgrade_progress(
+        0x0002,  // MCU upgrade flag
+        progress,
+        hw_version.c_str(),
+        sw_version.c_str(),
+        status,
+        buf,
+        sizeof(buf)
+    );
+
+    if (total_len == 0) {
+        ESP_LOGE(TAG, "Failed to pack OTA progress message");
+        return;
+    }
+
+    // Log the hex dump of the message
+    char hex_str[512] = {0};
+    int pos = 0;
+    for (size_t i = 0; i < total_len; i++) {
+        pos += snprintf(hex_str + pos, sizeof(hex_str) - pos, "%02X", buf[i]);
+    }
+    ESP_LOGI(TAG, "OTA Progress Report (hex): %s (len: %zu)", hex_str, total_len);
+
+    // Publish the message
+    if (!publish("cli2ser_req", std::string((char*)buf, total_len))) {
+        ESP_LOGE(TAG, "Failed to publish OTA progress report");
+    }
 }
 
 void MqttClient::deinit() {

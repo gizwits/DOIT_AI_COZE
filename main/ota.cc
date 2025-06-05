@@ -15,6 +15,8 @@
 #endif
 
 #include <cstring>
+#include "server/giz_mqtt.h"
+
 #include <vector>
 #include <sstream>
 #include <algorithm>
@@ -127,6 +129,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
     char buffer[512];
     size_t total_read = 0, recent_read = 0;
+    size_t total_written = 0;
     auto last_calc_time = esp_timer_get_time();
     while (true) {
         int ret = http->Read(buffer, sizeof(buffer));
@@ -136,14 +139,15 @@ void Ota::Upgrade(const std::string& firmware_url) {
             return;
         }
 
-        // Calculate speed and progress every second
-        recent_read += ret;
+        // 下载进度上报（0~90%）
         total_read += ret;
+        recent_read += ret;
         if (esp_timer_get_time() - last_calc_time >= 1000000 || ret == 0) {
-            size_t progress = total_read * 100 / content_length;
-            ESP_LOGI(TAG, "Progress: %zu%% (%zu/%zu), Speed: %zuB/s", progress, total_read, content_length, recent_read);
+            size_t download_progress = (content_length > 0) ? (total_read * 90 / content_length) : 0;
+            MqttClient::getInstance().sendOtaProgressReport(download_progress, "downloading");
+            ESP_LOGI(TAG, "Progress: %zu%% (%zu/%zu), Speed: %zuB/s", download_progress, total_read, content_length, recent_read);
             if (upgrade_callback_) {
-                upgrade_callback_(progress, recent_read);
+                upgrade_callback_(download_progress, recent_read);
             }
             last_calc_time = esp_timer_get_time();
             recent_read = 0;
@@ -185,6 +189,15 @@ void Ota::Upgrade(const std::string& firmware_url) {
             delete http;
             return;
         }
+        total_written += ret;
+
+        // 写入进度上报（90~100%）
+        if (content_length > 0) {
+            size_t write_progress = total_written * 10 / content_length; // 0~10
+            size_t ota_progress = 90 + write_progress; // 90~100
+            if (ota_progress > 100) ota_progress = 100;
+            MqttClient::getInstance().sendOtaProgressReport(ota_progress, "writing");
+        }
     }
     delete http;
 
@@ -203,6 +216,9 @@ void Ota::Upgrade(const std::string& firmware_url) {
         ESP_LOGE(TAG, "Failed to set boot partition: %s", esp_err_to_name(err));
         return;
     }
+
+    // 完成进度上报（100%）
+    MqttClient::getInstance().sendOtaProgressReport(100, "done");
 
     ESP_LOGI(TAG, "Firmware upgrade successful, rebooting in 3 seconds...");
     vTaskDelay(pdMS_TO_TICKS(3000));
