@@ -53,6 +53,7 @@ public:
     void OnAudioChannelOpened(std::function<void()> callback);
     void OnAudioChannelClosed(std::function<void()> callback);
     void OnNetworkError(std::function<void(const std::string& message)> callback);
+    void OnLog(std::function<void(const std::string& level, const std::string& message)> callback);
 
     virtual bool Start() = 0;
     virtual bool OpenAudioChannel() = 0;
@@ -75,6 +76,7 @@ protected:
     std::function<void()> on_audio_channel_opened_;
     std::function<void()> on_audio_channel_closed_;
     std::function<void(const std::string& message)> on_network_error_;
+    std::function<void(const std::string& level, const std::string& message)> on_log_;
 
     RoomParams room_params_;
 

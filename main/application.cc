@@ -57,6 +57,9 @@ Application::Application() {
     background_task_ = new BackgroundTask(4096 * 8);
 #endif
 
+    // Generate trace ID on startup
+    GenerateTraceId();
+
     esp_timer_create_args_t clock_timer_args = {
         .callback = [](void* arg) {
             Application* app = (Application*)arg;
@@ -140,10 +143,13 @@ void Application::CheckNewVersion() {
             background_task_ = nullptr;
             vTaskDelay(pdMS_TO_TICKS(1000));
 
-            ota_.StartUpgrade([display](int progress, size_t speed) {
+            ota_.StartUpgrade([this,display](int progress, size_t speed) {
                 char buffer[64];
                 snprintf(buffer, sizeof(buffer), "%d%% %zuKB/s", progress, speed / 1024);
                 display->SetChatMessage("system", buffer);
+
+                mqtt_client_.sendOtaProgressReport(progress, "downloading");
+
             });
 
             // If upgrade success, the device will reboot and never reach here
@@ -427,10 +433,6 @@ void Application::Start() {
     /* Wait for the network to be ready */
     bool has_wifi_config = board.StartNetwork();
 
-    PlaySound(Lang::Sounds::P3_CONNECT_SUCCESS);
-
-    // Check for new firmware version or get the MQTT broker address
-    CheckNewVersion();
 
     // Initialize MQTT client
     protocol_ = std::make_unique<WebsocketProtocol>();
@@ -443,8 +445,10 @@ void Application::Start() {
     // protocol_->UpdateRoomParams(params);
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
-    mqtt_client_ = std::make_unique<MqttClient>();
-    mqtt_client_->OnRoomParamsUpdated([this](const RoomParams& params) {
+    // mqtt_client_ = mqtt_client_;
+
+    // mqtt_client_ = std::make_unique<MqttClient>();
+    mqtt_client_.OnRoomParamsUpdated([this](const RoomParams& params) {
         
         // 判断 protocol_ 是否启动
         // 如果启动了，就断开重新连接
@@ -467,11 +471,19 @@ void Application::Start() {
         protocol_->UpdateRoomParams(params);
 
     });
-    if (!mqtt_client_->initialize()) {
+    if (!mqtt_client_.initialize()) {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");
         Alert(Lang::Strings::ERROR, Lang::Strings::ERROR, "sad", Lang::Sounds::P3_EXCLAMATION);
         return;
     }
+
+
+    // Check for new firmware version or get the MQTT broker address
+    CheckNewVersion();
+
+    PlaySound(Lang::Sounds::P3_CONNECT_SUCCESS);
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     // Settings settings("wifi", true);
     // bool need_activation = settings.GetInt("need_activation");
@@ -541,9 +553,17 @@ void Application::Start() {
 
     // Initialize the protocol
     protocol_->OnNetworkError([this](const std::string& message) {
+        char log_str[512];
+        snprintf(log_str, sizeof(log_str), "网络错误: %s", message.c_str());
+        mqtt_client_.sendTraceLog("error", log_str);
         SetDeviceState(kDeviceStateIdle);
         Alert(Lang::Strings::ERROR, message.c_str(), "sad", Lang::Sounds::P3_EXCLAMATION);
     });
+
+    protocol_->OnLog([this](const std::string& level, const std::string& message) {
+        // mqtt_client_.sendTraceLog(level.c_str(), message.c_str());
+    });
+
     protocol_->OnIncomingAudio([this](std::vector<uint8_t>&& data) {
         const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
         std::lock_guard<std::mutex> lock(mutex_);
@@ -1016,6 +1036,7 @@ void Application::WriteAudio(std::vector<uint8_t>& opus) {
 
 void Application::AbortSpeaking(AbortReason reason) {
     ESP_LOGI(TAG, "Abort speaking");
+    mqtt_client_.sendTraceLog("info", "打断AI说话");
     aborted_ = true;
     protocol_->SendAbortSpeaking(reason);
     SetDeviceState(kDeviceStateListening);
@@ -1030,6 +1051,10 @@ void Application::SetDeviceState(DeviceState state) {
     if (device_state_ == state) {
         return;
     }
+
+    char log_str[512];
+    snprintf(log_str, sizeof(log_str), "设置设备状态: %s", STATE_STRINGS[state]);
+    mqtt_client_.sendTraceLog("info", log_str);
     
     clock_ticks_ = 0;
     auto previous_state = device_state_;
@@ -1167,20 +1192,25 @@ void Application::UpdateIotStates() {
     }
 }
 
+MqttClient& Application::GetMqttClient() {
+    return mqtt_client_;
+}
+
 void Application::Reboot() {
     ESP_LOGI(TAG, "Rebooting...");
     esp_restart();
 }
 
 void Application::WakeWordInvoke(const std::string& wake_word) {
+    mqtt_client_.sendTraceLog("info", "唤醒词触发");
+
 #ifdef CONFIG_UES_CHAT_MODE_BUTTON
     ESP_LOGI(TAG, "Wake word invoke");
     return;
 #else
     if (device_state_ == kDeviceStateIdle) {
-        vTaskDelay(pdMS_TO_TICKS(300));
         PlaySound(Lang::Sounds::P3_SUCCESS);
-        vTaskDelay(pdMS_TO_TICKS(300));
+        vTaskDelay(pdMS_TO_TICKS(500));
         ToggleChatState();
         Schedule([this, wake_word]() {
             if (protocol_) {
@@ -1214,4 +1244,15 @@ bool Application::CanEnterSleepMode() {
 
     // Now it is safe to enter sleep mode
     return true;
+}
+
+void Application::GenerateTraceId() {
+    uint8_t random_bytes[16];
+    esp_fill_random(random_bytes, sizeof(random_bytes));
+    
+    for (int i = 0; i < 16; i++) {
+        sprintf(trace_id_ + i * 2, "%02x", random_bytes[i]);
+    }
+    trace_id_[32] = '\0';
+    ESP_LOGI(TAG, "Generated trace ID: %s", trace_id_);
 }

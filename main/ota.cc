@@ -101,6 +101,8 @@ void Ota::MarkCurrentVersionValid() {
 }
 
 void Ota::Upgrade(const std::string& firmware_url) {
+
+    MqttClient::getInstance().sendTraceLog("info", "开始升级固件");
     ESP_LOGI(TAG, "Upgrading firmware from %s", firmware_url.c_str());
     esp_ota_handle_t update_handle = 0;
     auto update_partition = esp_ota_get_next_update_partition(NULL);
@@ -131,6 +133,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
     size_t total_read = 0, recent_read = 0;
     size_t total_written = 0;
     auto last_calc_time = esp_timer_get_time();
+    size_t last_reported_progress = 0;
     while (true) {
         int ret = http->Read(buffer, sizeof(buffer));
         if (ret < 0) {
@@ -144,10 +147,12 @@ void Ota::Upgrade(const std::string& firmware_url) {
         recent_read += ret;
         if (esp_timer_get_time() - last_calc_time >= 1000000 || ret == 0) {
             size_t download_progress = (content_length > 0) ? (total_read * 90 / content_length) : 0;
-            MqttClient::getInstance().sendOtaProgressReport(download_progress, "downloading");
-            ESP_LOGI(TAG, "Progress: %zu%% (%zu/%zu), Speed: %zuB/s", download_progress, total_read, content_length, recent_read);
-            if (upgrade_callback_) {
-                upgrade_callback_(download_progress, recent_read);
+            // 只在进度变化超过5%时上报
+            if (download_progress >= last_reported_progress + 5 || ret == 0) {
+                if (upgrade_callback_) {
+                    upgrade_callback_(download_progress, recent_read);
+                }
+                last_reported_progress = download_progress;
             }
             last_calc_time = esp_timer_get_time();
             recent_read = 0;
@@ -190,14 +195,6 @@ void Ota::Upgrade(const std::string& firmware_url) {
             return;
         }
         total_written += ret;
-
-        // 写入进度上报（90~100%）
-        if (content_length > 0) {
-            size_t write_progress = total_written * 10 / content_length; // 0~10
-            size_t ota_progress = 90 + write_progress; // 90~100
-            if (ota_progress > 100) ota_progress = 100;
-            MqttClient::getInstance().sendOtaProgressReport(ota_progress, "writing");
-        }
     }
     delete http;
 
@@ -219,6 +216,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
     // 完成进度上报（100%）
     MqttClient::getInstance().sendOtaProgressReport(100, "done");
+    MqttClient::getInstance().sendTraceLog("info", "固件升级完成");
 
     ESP_LOGI(TAG, "Firmware upgrade successful, rebooting in 3 seconds...");
     vTaskDelay(pdMS_TO_TICKS(3000));

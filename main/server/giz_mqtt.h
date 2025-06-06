@@ -56,6 +56,7 @@ public:
     void OnRoomParamsUpdated(std::function<void(const RoomParams&)> callback);
     void sendOtaProgressReport(int progress, const char* status);
     void deinit();
+    void sendTraceLog(const char* level, const char* message);
 
     MqttClient() = default;
     ~MqttClient() = default;

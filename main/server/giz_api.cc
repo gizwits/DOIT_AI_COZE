@@ -9,6 +9,7 @@
 #include "mbedtls/aes.h"
 #include "mbedtls/sha256.h"
 #include "auth.h"
+#include "application.h"
 #include "settings.h"
 #include "cJSON.h"
 
@@ -455,15 +456,7 @@ int32_t GServer::activationDevice(std::function<void(mqtt_config_t*)> callback) 
 }
 
 char* GServer::get_trace_id() {
-    static char trace_id[33];
-    uint8_t random_bytes[16];
-    esp_fill_random(random_bytes, sizeof(random_bytes));
-    
-    for (int i = 0; i < 16; i++) {
-        sprintf(trace_id + i * 2, "%02x", random_bytes[i]);
-    }
-    trace_id[32] = '\0';
-    return trace_id;
+    return (char*)Application::GetInstance().GetTraceId();
 }
 
 static char* url_decode(const char* src) {

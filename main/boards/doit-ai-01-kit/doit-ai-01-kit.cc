@@ -23,7 +23,6 @@
 class CustomBoard : public WifiBoard {
 private:
     Button boot_button_;
-    Button rec_button_;
     PowerSaveTimer* power_save_timer_;
     VbAduioCodec audio_codec;
     bool sleep_flag_ = false;
@@ -44,13 +43,10 @@ private:
 
     void run_sleep_mode(bool need_delay = true){
         auto& application = Application::GetInstance();
-        application.SetDeviceState(kDeviceStateIdle);
+        // application.AbortSpeaking(kAbortReasonNone);
         application.PlaySound(Lang::Sounds::P3_SLEEP);
-        if(need_delay){
-            vTaskDelay(pdMS_TO_TICKS(3000));
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(2000));
-        }
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        ESP_LOGI(TAG, "Sleep mode");
         // 配置唤醒源
         esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);
         esp_deep_sleep_start();
@@ -58,14 +54,11 @@ private:
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
-#ifdef CONFIG_UES_CHAT_MODE_BUTTON
-            ESP_LOGI(TAG, "Button chat mode");
-#else
             auto &app = Application::GetInstance();
             app.ToggleChatState();
-#endif
         });
         boot_button_.OnPressUp([this]() {
+            ESP_LOGI(TAG, "Press up");
             if(sleep_flag_){
                 run_sleep_mode(false);
             }
@@ -75,13 +68,9 @@ private:
                 ResetWifiConfiguration();
             }
         });
-        rec_button_.OnPressUp([this]() {
-            ESP_LOGI(TAG, "Stop listening");
-            Application::GetInstance().StopListening();
-        });
-        rec_button_.OnPressDown([this]() {
-            power_save_timer_->WakeUp();
-            Application::GetInstance().StartListening();
+        boot_button_.OnLongPress([this]() {
+            ESP_LOGI(TAG, "Long press");
+            sleep_flag_ = true;
         });
     }
 
@@ -92,7 +81,7 @@ private:
     }
 
 public:
-    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), rec_button_(BUILTIN_REC_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){      
+    CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){      
         InitializePowerSaveTimer();       
         InitializeButtons();
         InitializeIot();

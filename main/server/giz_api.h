@@ -85,12 +85,10 @@ public:
     // 获取websocket配置
     static int32_t getWebsocketConfig(std::function<void(RoomParams*)> callback);
 
+
 private:
     // 16进制转字符串
     static void hexToStr(uint8_t *dest, uint8_t *src, int32_t srcLen, int8_t flag);
-    
-
-    // 获取trace_id
     static char* get_trace_id();
 
     // 静态成员变量

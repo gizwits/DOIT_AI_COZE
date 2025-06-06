@@ -126,11 +126,17 @@ bool MqttClient::initialize() {
     }
 
     mqtt_ = Board::GetInstance().CreateMqtt();
+    ESP_LOGI(TAG, "MQTT client created");
     mqtt_->SetKeepAlive(20);
 
     mqtt_->OnDisconnected([this]() {
         ESP_LOGI(TAG, "Disconnected from endpoint");
+        sendTraceLog("warning", "断开 mqtt 连接");
         mqtt_event_ = 0;
+
+        // 重新连接
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        mqtt_->Connect(endpoint_, port_, client_id_, username_, password_);
     });
 
     mqtt_->OnMessage([this](const std::string& topic, const std::string& payload) {
@@ -199,14 +205,17 @@ bool MqttClient::initialize() {
     vTaskDelay(pdMS_TO_TICKS(10));
     if (mqtt_->Subscribe(response_topic, 0) != 0) {
         ESP_LOGE(TAG, "Failed to subscribe to response topic");
+        sendTraceLog("error", "订阅 房间信息 响应 失败");
     }
     
     if (mqtt_->Subscribe(push_topic, 1) != 0) {
         ESP_LOGE(TAG, "Failed to subscribe to push topic");
+        sendTraceLog("error", "订阅 推送 失败");
     }
     
     if (mqtt_->Subscribe(server_notify_topic, 1) != 0) {
         ESP_LOGE(TAG, "Failed to subscribe to server notify topic");
+        sendTraceLog("error", "订阅 通知 失败");
     }
     
     // 获取房间信息
@@ -217,16 +226,16 @@ bool MqttClient::initialize() {
 
 bool MqttClient::publish(const std::string& topic, const std::string& payload) {
     if (mqtt_ == nullptr) {
-        ESP_LOGE(TAG, "MQTT client not initialized");
+        ESP_LOGE(TAG, "MQTT client not initialized publish");
         return false;
     }
-    ESP_LOGI(TAG, "publish topic: %s, payload: %s", topic.c_str(), payload.c_str());
+    // ESP_LOGI(TAG, "publish topic: %s, payload: %s", topic.c_str(), payload.c_str());
     return mqtt_->Publish(topic, payload);
 }
 
 bool MqttClient::subscribe(const std::string& topic) {
     if (mqtt_ == nullptr) {
-        ESP_LOGE(TAG, "MQTT client not initialized");
+        ESP_LOGE(TAG, "MQTT client not initialized subscribe");
         return false;
     }
     return mqtt_->Subscribe(topic);
@@ -265,6 +274,7 @@ bool MqttClient::getRoomInfo() {
         "}";
 
     if (!publish("llm/" + client_id_ + "/config/request", msg)) {
+        sendTraceLog("error", "发送 房间信息 请求 失败");
         return false;
     }
 
@@ -282,10 +292,6 @@ bool MqttClient::getRoomInfo() {
 }
 
 int MqttClient::sendResetToCloud() {
-    if (mqtt_ == nullptr || mqtt_event_ == 0) {
-        return -2;
-    }
-
     uint8_t buf[8] = {0};
     uint32_t version = htonl(0x00000003);
     uint16_t cmd = htons(0x021E);
@@ -303,11 +309,6 @@ int MqttClient::getPublishedId() {
 }
 
 void MqttClient::sendOtaProgressReport(int progress, const char* status) {
-    if (mqtt_ == nullptr || mqtt_event_ == 0) {
-        ESP_LOGE(TAG, "MQTT client not initialized");
-        return;
-    }
-
     uint8_t buf[256] = {0};
     
     // 获取当前版本信息
@@ -346,6 +347,8 @@ void MqttClient::sendOtaProgressReport(int progress, const char* status) {
 }
 
 void MqttClient::deinit() {
+    ESP_LOGW(TAG, "Deinitializing MQTT client");
+    sendTraceLog("info", "销毁 mqtt");
     if (timer_) {
         xTimerDelete(timer_, 0);
         timer_ = nullptr;
@@ -413,6 +416,9 @@ bool MqttClient::parseRealtimeAgent(const char* in_str, int in_len, room_params_
     if (method && strcmp(method->valuestring, "websocket.auth.response") == 0) {
         cJSON* body = cJSON_GetObjectItem(root, "body");
         if (body) {
+
+            sendTraceLog("info", "房间信息");
+
             cJSON* coze_websocket = cJSON_GetObjectItem(body, "coze_websocket");
             if (coze_websocket) {
                 cJSON* bot_id = cJSON_GetObjectItem(coze_websocket, "bot_id");
@@ -448,6 +454,10 @@ bool MqttClient::parseM2MCtrlMsg(const char* in_str, int in_len) {
 
     cJSON* method = cJSON_GetObjectItem(json, "method");
     ESP_LOGI(TAG, "parseM2MCtrlMsg method: %s", method->valuestring);
+
+    char log_str[512];
+    snprintf(log_str, sizeof(log_str), "收到 M2M 消息, method: %s", method->valuestring);
+    sendTraceLog("info", log_str);
     if (method && method->valuestring) {
         if (strcmp(method->valuestring, "rtc.room.join") == 0) {
             // Handle room join
@@ -498,5 +508,24 @@ void MqttClient::handleMqttMessage(mqtt_msg_t* msg) {
                 // run_start_ota_task(result.version_info.module_sw_ver, result.version_info.download_url);
             }
         }
+    }
+}
+
+void MqttClient::sendTraceLog(const char* level, const char* message) {
+    // ESP_LOGI(TAG, "sendTraceLog: %s", message);
+    
+    // Format the topic
+    char topic[64] = {0};
+    snprintf(topic, sizeof(topic), "sys/%s/log", client_id_.c_str());
+    
+    // Format the payload
+    char payload[512] = {0};
+    snprintf(payload, sizeof(payload), 
+        "{\"message\": \"%s\", \"trace_id\": \"%s\", \"extra\": \"%s\"}", 
+        message, Application::GetInstance().GetTraceId(), level);
+
+    // Publish the message
+    if (!publish(topic, std::string(payload))) {
+        ESP_LOGE(TAG, "Failed to publish log message");
     }
 }

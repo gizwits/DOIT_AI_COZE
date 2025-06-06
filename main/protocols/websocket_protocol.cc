@@ -289,6 +289,9 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {
                 ESP_LOGE(TAG, "Error: %s", str_data.data());
+                if (on_log_) {
+                    on_log_("error", str_data.data());
+                }
             }
             
             cJSON_Delete(root);
@@ -300,6 +303,9 @@ bool WebsocketProtocol::OpenAudioChannel() {
         report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "4bo socket disconnected", NULL);
         
         ESP_LOGI(TAG, "Websocket disconnected");
+        if (on_log_) {
+            on_log_("warning", "Websocket disconnected");
+        }
         if (on_audio_channel_closed_ != nullptr) {
             on_audio_channel_closed_();
         }

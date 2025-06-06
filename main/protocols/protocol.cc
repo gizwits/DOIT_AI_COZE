@@ -25,6 +25,10 @@ void Protocol::OnNetworkError(std::function<void(const std::string& message)> ca
     on_network_error_ = callback;
 }
 
+void Protocol::OnLog(std::function<void(const std::string& level, const std::string& message)> callback) {
+    on_log_ = callback;
+}
+
 void Protocol::SetError(const std::string& message) {
     error_occurred_ = true;
     if (on_network_error_ != nullptr) {
@@ -44,9 +48,15 @@ void Protocol::SendAbortSpeaking(AbortReason reason) {
 }
 
 void Protocol::SendWakeWordDetected(const std::string& wake_word) {
-    // std::string json = "{\"session_id\":\"" + session_id_ + 
-    //                   "\",\"type\":\"listen\",\"state\":\"detect\",\"text\":\"" + wake_word + "\"}";
-    // SendText(json);
+    const char *init_message = "{"
+        "\"event_type\":\"conversation.message.create\","
+        "\"data\":{"
+            "\"role\":\"user\","
+            "\"content_type\":\"text\","
+            "\"content\":\"你好\""
+        "}"
+    "}";
+    SendText(init_message);
 }
 
 void Protocol::SendStartListening(ListeningMode mode) {

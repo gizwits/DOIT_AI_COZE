@@ -63,6 +63,7 @@ public:
     DeviceState GetDeviceState() const { return device_state_; }
     bool IsVoiceDetected() const { return voice_detected_; }
     void Schedule(std::function<void()> callback);
+    MqttClient& GetMqttClient();
     void SetDeviceState(DeviceState state);
     void Alert(const char* status, const char* message, const char* emotion = "", const std::string_view& sound = "");
     void DismissAlert();
@@ -89,6 +90,10 @@ public:
         is_mic_test_mode_ = enabled;
     }
 
+    // Trace ID related methods
+    const char* GetTraceId() const { return trace_id_; }
+    void GenerateTraceId();
+
 private:
     Application();
     ~Application();
@@ -107,7 +112,7 @@ private:
     esp_timer_handle_t clock_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
-    std::unique_ptr<MqttClient> mqtt_client_;
+    MqttClient mqtt_client_;
 #if CONFIG_USE_REALTIME_CHAT
     bool realtime_chat_enabled_ = true;
     bool realtime_chat_is_start_ = false;
@@ -134,6 +139,8 @@ private:
     OpusResampler output_resampler_;
 
     bool is_mic_test_mode_ = false;
+
+    char trace_id_[33];  // 32 chars + null terminator
 
     void MainEventLoop();
     void OnAudioInput();
