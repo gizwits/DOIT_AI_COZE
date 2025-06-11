@@ -77,6 +77,7 @@ private:
     // Auth related helper functions
     void SendAuthResponse(const struct sockaddr_in& client_addr, bool success, const char* error_msg = nullptr);
     bool WriteAuthData(const char* data, const struct sockaddr_in& client_addr);
+    void SendResponse(const struct sockaddr_in& client_addr, const char* cmd, const char* data);
 
     std::string broadcast_addr_;
     int broadcast_port_;

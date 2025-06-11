@@ -361,10 +361,34 @@ void UdpBroadcaster::process_command_thread() {
         } else if (cmd->cmd == "reboot") {
             ESP_LOGI(TAG, "Processing reboot command");
             esp_restart();
-        } else {
+        }
+        // else if (cmd->cmd == "433_recv") {
+        //     auto& app = Application::GetInstance();
+        //     app.PlaySound(Lang::Sounds::P3_SUCCESS);
+        //     SendResponse(cmd->client_addr, "433_recv", "success");
+        // } else if (cmd->cmd == "433_send") {
+        //     auto& app = Application::GetInstance();
+        //     app.PlaySound(Lang::Sounds::P3_SUCCESS);
+        // }
+        else {
             ESP_LOGW(TAG, "Unknown command: %s", cmd->cmd.c_str());
         }
     }
+}
+
+void UdpBroadcaster::SendResponse(const struct sockaddr_in& client_addr, const char* cmd, const char* data) {
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "cmd", cmd);
+    cJSON_AddStringToObject(response, "target", GetMacAddress().c_str());
+    cJSON_AddStringToObject(response, "data", data);
+    char *response_str = cJSON_PrintUnformatted(response);
+    if (response_str) {
+        sendto(broadcast_socket_, response_str, strlen(response_str), 0,
+              (struct sockaddr*)&client_addr, sizeof(client_addr));
+        free(response_str);
+    }
+    cJSON_Delete(response);
+    
 }
 
 // 发送 auth 响应

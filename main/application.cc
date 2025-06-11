@@ -1238,8 +1238,12 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
         }); 
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
-            AbortSpeaking(kAbortReasonNone);
+            // 打断AI
+            protocol_->SendAbortSpeaking(kAbortReasonNone);
+            ResetDecoder();
             PlaySound(Lang::Sounds::P3_SUCCESS);
+            vTaskDelay(pdMS_TO_TICKS(300));
+            SetDeviceState(kDeviceStateListening);
         });
     }
 #endif
