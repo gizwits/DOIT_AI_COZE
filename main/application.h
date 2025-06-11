@@ -69,6 +69,7 @@ public:
     void DismissAlert();
     void AbortSpeaking(AbortReason reason);
     void ToggleChatState();
+    void PlayMusic();
     void StartListening();
     void StopListening();
     void UpdateIotStates();

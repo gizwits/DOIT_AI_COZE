@@ -36,17 +36,19 @@ private:
         });
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
-            run_sleep_mode(false);
+            run_sleep_mode(true);
         });
         power_save_timer_->SetEnabled(true);
     }
 
     void run_sleep_mode(bool need_delay = true){
         auto& application = Application::GetInstance();
-        // application.AbortSpeaking(kAbortReasonNone);
-        application.PlaySound(Lang::Sounds::P3_SLEEP);
-        vTaskDelay(pdMS_TO_TICKS(1500));
-        ESP_LOGI(TAG, "Sleep mode");
+        if (need_delay) {
+            application.PlaySound(Lang::Sounds::P3_SLEEP);
+            vTaskDelay(pdMS_TO_TICKS(1500));
+            ESP_LOGI(TAG, "Sleep mode");
+        }
+        
         // 配置唤醒源
         esp_deep_sleep_enable_gpio_wakeup(1ULL << BOOT_BUTTON_GPIO, ESP_GPIO_WAKEUP_GPIO_LOW);
         esp_deep_sleep_start();

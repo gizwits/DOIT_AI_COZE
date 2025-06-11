@@ -21,6 +21,8 @@
 #include <esp_wifi.h>
 #include <esp_wifi_types.h>
 #include <esp_task_wdt.h>
+#include "player/player.h"
+
 
 #define TAG "Application"
 
@@ -301,10 +303,10 @@ void Application::ToggleChatState() {
             AbortSpeaking(kAbortReasonNone);
         });
     } else if (device_state_ == kDeviceStateListening) {
-        Schedule([this]() {
-            protocol_->CloseAudioChannel();
-            
-        });
+        // 不带屏幕的场景，如果 kill掉了连接，会很困惑
+        // Schedule([this]() {
+        //     protocol_->CloseAudioChannel();
+        // });
     }
 }
 
@@ -747,9 +749,26 @@ void Application::Start() {
         ResetDecoder();
         // PlaySound(Lang::Sounds::P3_SUCCESS);
     }
-    
+    // PlayMusic();
     // Enter the main event loop
+
     MainEventLoop();
+}
+
+void Application::PlayMusic() {
+    Player player;
+    player.setPacketCallback([this](const std::vector<uint8_t>& data) {
+        // 在这里处理数据包，比如调用PlaySound
+        const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (audio_decode_queue_.size() < max_packets_in_queue) {
+            audio_decode_queue_.emplace_back(std::move(data));
+        } else {
+            ESP_LOGW("AUDIO", "Audio decode queue is full! Current size: %d, Max size: %d", 
+                    audio_decode_queue_.size(), max_packets_in_queue);
+        }
+    });
+    player.processMP3Stream("http://appota-1251025085.cos.ap-guangzhou.myqcloud.com/docs/v1/xiaotuziguaiguai.p3");
 }
 
 void Application::OnClockTimer() {
@@ -1210,7 +1229,7 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
 #else
     if (device_state_ == kDeviceStateIdle) {
         PlaySound(Lang::Sounds::P3_SUCCESS);
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(300));
         ToggleChatState();
         Schedule([this, wake_word]() {
             if (protocol_) {
@@ -1220,14 +1239,7 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
             AbortSpeaking(kAbortReasonNone);
-        });
-    } else if (device_state_ == kDeviceStateListening) {   
-        Schedule([this]() {
-            if (protocol_) {
-                protocol_->CloseAudioChannel();
-                vTaskDelay(pdMS_TO_TICKS(500));
-                PlaySound(Lang::Sounds::P3_MUTE);
-            }
+            PlaySound(Lang::Sounds::P3_SUCCESS);
         });
     }
 #endif
