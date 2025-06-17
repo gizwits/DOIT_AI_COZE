@@ -202,6 +202,7 @@ static esp_err_t _report_error(error_type_t type, error_level_t level,
     // Get HTTP client from board
     auto& board = Board::GetInstance();
     auto http = board.CreateHttp();
+
     if (!http) {
         ESP_LOGE(TAG, "Failed to create HTTP client");
         free(post_data);
@@ -217,7 +218,12 @@ static esp_err_t _report_error(error_type_t type, error_level_t level,
     
     // Execute request
     ESP_LOGI(TAG, "Attempting to open HTTP connection...");
-    esp_err_t err = http->Open("POST", url, post_data);
+
+    std::string content(post_data, strlen(post_data));
+    http->SetContent(std::move(content));
+
+    esp_err_t err = http->Open("POST", url);
+    
     free(post_data);  // Free the JSON string
     
     if (err != ESP_OK) {
@@ -233,7 +239,7 @@ static esp_err_t _report_error(error_type_t type, error_level_t level,
     ESP_LOGI(TAG, "Received HTTP response with status code: %d", status_code);
     
     // Read response content
-    std::string response = http->GetBody();
+    std::string response = http->ReadAll();
     if (!response.empty()) {
         ESP_LOGI(TAG, "Response body (%zu bytes): %s", response.length(), response.c_str());
     } else {
@@ -389,7 +395,9 @@ esp_err_t upload_stack_as_attachment(const char* event_id, const char* stack) {
     
     // Execute request
     ESP_LOGI(TAG, "Attempting to open HTTP connection for stack upload...");
-    esp_err_t err = http->Open("POST", upload_url, form_data);
+    std::string content(form_data.c_str(), form_data.length());
+    http->SetContent(std::move(content));
+    esp_err_t err = http->Open("POST", upload_url);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "HTTP POST request failed for stack upload: %s (error code: %d)", 
                  esp_err_to_name(err), err);
@@ -404,7 +412,7 @@ esp_err_t upload_stack_as_attachment(const char* event_id, const char* stack) {
     ESP_LOGI(TAG, "Stack upload response status code: %d", status_code);
     
     // Read response content
-    std::string response = http->GetBody();
+    std::string response = http->ReadAll();
     if (!response.empty()) {
         ESP_LOGI(TAG, "Stack upload response (%zu bytes): %s", 
                  response.length(), response.c_str());

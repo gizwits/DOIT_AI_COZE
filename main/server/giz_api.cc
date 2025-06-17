@@ -309,8 +309,9 @@ int32_t GServer::getProvision(std::function<void(mqtt_config_t*)> callback) {
         delete http;
         return -1;
     }
-
-    std::string response = http->GetBody();
+    auto status_code = http->GetStatusCode();
+    std::string response = http->ReadAll();
+    http->Close();
     delete http;
 
     return getProvision_prase_cb(response.c_str(), response.length());
@@ -345,8 +346,9 @@ int32_t GServer::getLimitProvision(std::function<void(mqtt_config_t*)> callback)
         delete http;
         return -1;
     }
-
-    std::string response = http->GetBody();
+    auto status_code = http->GetStatusCode();
+    std::string response = http->ReadAll();
+    http->Close();
     delete http;
 
     return getProvision_prase_cb(response.c_str(), response.length());
@@ -392,13 +394,17 @@ int32_t GServer::activationLimitDevice(std::function<void(mqtt_config_t*)> callb
     http->SetHeader("Content-Type", "text/plain");
 
     // 发送POST请求
-    if (!http->Open("POST", url, (const char*)sOnboardingData)) {
+    std::string content((char*)sOnboardingData, len);
+    http->SetContent(std::move(content));
+    if (!http->Open("POST", url)) {
         ESP_LOGE(TAG, "Failed to open HTTP connection");
         delete http;
         return -1;
     }
+    auto status_code = http->GetStatusCode();
+    std::string response = http->ReadAll();
+    http->Close();
 
-    std::string response = http->GetBody();
     delete http;
     ESP_LOGI(TAG, "response: %s", response.c_str());
 
@@ -442,13 +448,17 @@ int32_t GServer::activationDevice(std::function<void(mqtt_config_t*)> callback) 
     http->SetHeader("Content-Type", "text/plain");
 
     // 发送POST请求
-    if (!http->Open("POST", url, (const char*)sOnboardingData)) {
+    std::string content((char*)sOnboardingData, len);
+    http->SetContent(std::move(content));
+    if (!http->Open("POST", url)) {
         ESP_LOGE(TAG, "Failed to open HTTP connection");
         delete http;
         return -1;
     }
+    auto status_code = http->GetStatusCode();
+    std::string response = http->ReadAll();
+    http->Close();
 
-    std::string response = http->GetBody();
     delete http;
     ESP_LOGI(TAG, "response: %s", response.c_str());
 
@@ -514,14 +524,22 @@ int32_t GServer::getFirmwareUpdate(const char* hw_version, const char* sw_versio
     http->SetHeader("X-Trace-Id", get_trace_id());
     http->SetHeader("Content-Type", "text/plain");
 
+    // 将字节数组转换为字符串
+    std::string content((char*)sFirmwareData, len);
+    http->SetContent(std::move(content));
+
     // 发送PUT请求
-    if (!http->Open("PUT", url, (const char*)sFirmwareData)) {
+    if (!http->Open("PUT", url)) {
         ESP_LOGE(TAG, "Failed to open HTTP connection");
         delete http;
         return -1;
     }
 
-    std::string response = http->GetBody();
+    auto status_code = http->GetStatusCode();
+
+    std::string response = http->ReadAll();
+    http->Close();
+
     delete http;
     ESP_LOGI(TAG, "Firmware update response: %s", response.c_str());
 
@@ -602,8 +620,11 @@ int32_t GServer::getWebsocketConfig(std::function<void(RoomParams*)> callback) {
         delete http;
         return -1;
     }
+    auto status_code = http->GetStatusCode();
 
-    std::string response = http->GetBody();
+    std::string response = http->ReadAll();
+    http->Close();
+
     delete http;
 
     // 解析JSON响应
