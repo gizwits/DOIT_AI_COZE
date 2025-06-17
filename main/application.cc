@@ -829,7 +829,7 @@ void Application::Schedule(std::function<void()> callback) {
 // they should use Schedule to call this function
 void Application::MainEventLoop() {
     auto& watchdog = Watchdog::GetInstance();
-    const TickType_t timeout = pdMS_TO_TICKS(20000); // 1秒超时
+    const TickType_t timeout = pdMS_TO_TICKS(3000);
     
     while (true) {
         // 喂狗
