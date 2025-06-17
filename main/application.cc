@@ -752,13 +752,13 @@ void Application::Start() {
     // PlayMusic();
     // Enter the main event loop
 
+    watchdog.SubscribeTask(xTaskGetCurrentTaskHandle());
     MainEventLoop();
 }
 
-void Application::PlayMusic() {
-    Player player;
-    player.setPacketCallback([this](const std::vector<uint8_t>& data) {
-        // 在这里处理数据包，比如调用PlaySound
+void Application::PlayMusic(const char* url) {
+    SetDeviceState(kDeviceStateIdle);
+    player_.setPacketCallback([this](const std::vector<uint8_t>& data) {
         const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
         std::lock_guard<std::mutex> lock(mutex_);
         if (audio_decode_queue_.size() < max_packets_in_queue) {
@@ -768,7 +768,11 @@ void Application::PlayMusic() {
                     audio_decode_queue_.size(), max_packets_in_queue);
         }
     });
-    player.processMP3Stream("http://appota-1251025085.cos.ap-guangzhou.myqcloud.com/docs/v1/xiaotuziguaiguai.p3");
+    player_.processMP3Stream(url);
+}
+
+void Application::CancelPlayMusic() {
+    player_.stop();
 }
 
 void Application::OnClockTimer() {
@@ -824,14 +828,22 @@ void Application::Schedule(std::function<void()> callback) {
 // If other tasks need to access the websocket or chat state,
 // they should use Schedule to call this function
 void Application::MainEventLoop() {
+    auto& watchdog = Watchdog::GetInstance();
+    const TickType_t timeout = pdMS_TO_TICKS(20000); // 1秒超时
+    
     while (true) {
-        auto bits = xEventGroupWaitBits(event_group_, SCHEDULE_EVENT, pdTRUE, pdFALSE, portMAX_DELAY);
+        // 喂狗
+        watchdog.Reset();
+        
+        auto bits = xEventGroupWaitBits(event_group_, SCHEDULE_EVENT, pdTRUE, pdFALSE, timeout);
 
         if (bits & SCHEDULE_EVENT) {
             std::unique_lock<std::mutex> lock(mutex_);
             std::list<std::function<void()>> tasks = std::move(main_tasks_);
             lock.unlock();
             for (auto& task : tasks) {
+                // 每个任务执行前都重置看门狗
+                watchdog.Reset();
                 task();
             }
         }

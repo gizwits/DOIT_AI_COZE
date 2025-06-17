@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include <esp_log.h>
 #include "esp_err.h"
+#include "application.h"
 #include "iot/thing_manager.h"
 
 
@@ -129,10 +130,11 @@ void CozeMCPParser::handle_mcp(std::string_view data) {
     } else if (strcmp(name->valuestring, "music_play") == 0) {
         cJSON *url = cJSON_GetObjectItem(args_json, "url");
         if (url && cJSON_IsString(url)) {
-            // send_tool_output_response(event_id, 
-            //                         cJSON_GetStringValue(conv_id), 
-            //                         cJSON_GetStringValue(tool_call_id), 
-            //                         "{\\\"music_play_results\\\": \\\"1\\\"}");
+            Application::GetInstance().PlayMusic(url->valuestring);
+            send_tool_output_response(event_id, 
+                                    cJSON_GetStringValue(conv_id), 
+                                    cJSON_GetStringValue(tool_call_id), 
+                                    "{\\\"music_play_results\\\": \\\"1\\\"}");
         }
     } else if (strcmp(name->valuestring, "sleep_control") == 0) {
         

@@ -75,6 +75,7 @@ typedef enum
     VB6824_CMD_SEND_PCM_EOF = 0x0201,
     VB6824_CMD_SEND_CTL = 0x0202,
     VB6824_CMD_SEND_VOLUM = 0x0203,
+    VB6824_CMD_SEND_SHUTDOWN = 0x0208,
 }vb6824_cmd_t;
 
 static QueueHandle_t g_uart_queue = NULL;
@@ -381,6 +382,10 @@ void vb6824_register_voice_command_cb(vb_voice_command_cb_t cb, void *arg){
 void vb6824_audio_set_output_volume(uint8_t volume){
     uint8_t vol = (uint8_t)((int)(volume * 31) / 100);
     __frame_send(VB6824_CMD_SEND_VOLUM, &vol, 1);
+}
+
+void vb6824_shutdown(void){
+    __frame_send(VB6824_CMD_SEND_SHUTDOWN, NULL, 0);
 }
 
 void vb6824_audio_write(uint8_t *data, uint16_t len){

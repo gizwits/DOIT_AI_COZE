@@ -73,6 +73,7 @@ private:
         boot_button_.OnLongPress([this]() {
             ESP_LOGI(TAG, "Long press");
             sleep_flag_ = true;
+            gpio_set_level(BUILTIN_LED_GPIO, 1);
         });
     }
 
@@ -84,6 +85,16 @@ private:
 
 public:
     CustomBoard() : boot_button_(BOOT_BUTTON_GPIO), audio_codec(CODEC_TX_GPIO, CODEC_RX_GPIO){      
+        gpio_config_t io_conf = {};
+        io_conf.pin_bit_mask = (1ULL << BUILTIN_LED_GPIO);
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        io_conf.intr_type = GPIO_INTR_DISABLE;
+        gpio_config(&io_conf);
+        gpio_set_level(BUILTIN_LED_GPIO, 0);
+
+        
         InitializePowerSaveTimer();       
         InitializeButtons();
         InitializeIot();
@@ -98,11 +109,6 @@ public:
                 ResetWifiConfiguration();
             }
         });
-    }
-
-    virtual Led* GetLed() override {
-        static SingleLed led(BUILTIN_LED_GPIO);
-        return &led;
     }
 
     virtual AudioCodec* GetAudioCodec() override {

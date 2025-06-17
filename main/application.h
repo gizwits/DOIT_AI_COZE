@@ -21,6 +21,7 @@
 #include "server/giz_mqtt.h"
 #include "ota.h"
 #include "background_task.h"
+#include "player/player.h"
 
 #if CONFIG_USE_WAKE_WORD_DETECT
 #include "wake_word_detect.h"
@@ -69,7 +70,6 @@ public:
     void DismissAlert();
     void AbortSpeaking(AbortReason reason);
     void ToggleChatState();
-    void PlayMusic();
     void StartListening();
     void StopListening();
     void UpdateIotStates();
@@ -77,6 +77,8 @@ public:
     void WakeWordInvoke(const std::string& wake_word);
     void PlaySound(const std::string_view& sound);
     bool CanEnterSleepMode();
+    void PlayMusic(const char* url);
+    void CancelPlayMusic();
     void ReadAudio(std::vector<int16_t>& data, int sample_rate, int samples);
 #ifdef CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS
     void ReadAudio(std::vector<uint8_t>& opus, int sample_rate, int samples);
@@ -127,7 +129,8 @@ private:
     TaskHandle_t check_new_version_task_handle_ = nullptr;
 
     // Audio encode / decode
-    TaskHandle_t audio_loop_task_handle_ = nullptr;
+    TaskHandle_t audio_loop_task_handle_;
+    TaskHandle_t main_loop_task_handle_;
     BackgroundTask* background_task_ = nullptr;
     std::chrono::steady_clock::time_point last_output_time_;
     std::list<std::vector<uint8_t>> audio_decode_queue_;
@@ -142,6 +145,8 @@ private:
     bool is_mic_test_mode_ = false;
 
     char trace_id_[33];  // 32 chars + null terminator
+
+    Player player_;
 
     void MainEventLoop();
     void OnAudioInput();
