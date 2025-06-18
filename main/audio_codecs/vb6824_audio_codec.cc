@@ -38,6 +38,7 @@ VbAduioCodec::VbAduioCodec(gpio_num_t tx, gpio_num_t rx) {
 
     vb6824_register_voice_command_cb([](char *command, uint16_t len, void *arg){
         auto this_ = (VbAduioCodec*)arg;
+        ESP_LOGE(TAG, "vb6824 recv cmd");
         this_->WakeUp(command);
     }, this);
 }

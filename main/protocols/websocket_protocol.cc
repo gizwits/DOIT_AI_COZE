@@ -232,11 +232,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 message_buffer_ += "\"text\":\"" + std::string(content_json->valuestring) + "\"";
                 message_buffer_ += "}";
                 
-                auto message_json = cJSON_Parse(message_buffer_.c_str());
-                if (message_json) {
-                    on_incoming_json_(message_json);
-                    cJSON_Delete(message_json);
-                }
+                on_incoming_json_(std::string(message_buffer_));
             } else if (event_type == "conversation.chat.in_progress") {
                 message_cache_.clear();
                 message_buffer_.clear();
@@ -245,11 +241,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 message_buffer_ += "\"state\":\"start\"";
                 message_buffer_ += "}";
                 
-                auto message_json = cJSON_Parse(message_buffer_.c_str());
-                if (message_json) {
-                    on_incoming_json_(message_json);
-                    cJSON_Delete(message_json);
-                }
+                on_incoming_json_(std::string(message_buffer_));
             } else if (event_type == "conversation.audio.completed") {
                 message_buffer_.clear();
                 message_buffer_ = "{";
@@ -257,11 +249,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 message_buffer_ += "\"state\":\"stop\"";
                 message_buffer_ += "}";
                 
-                auto message_json = cJSON_Parse(message_buffer_.c_str());
-                if (message_json) {
-                    on_incoming_json_(message_json);
-                    cJSON_Delete(message_json);
-                }
+                on_incoming_json_(std::string(message_buffer_));
             } else if (event_type == "input_audio_buffer.speech_started") {
                 auto& app = Application::GetInstance();
                 app.AbortSpeaking(kAbortReasonNone);
@@ -280,11 +268,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 message_buffer_ += "\"text\":\"" + message_cache_ + "\"";
                 message_buffer_ += "}";
                 
-                auto message_json = cJSON_Parse(message_buffer_.c_str());
-                if (message_json) {
-                    on_incoming_json_(message_json);
-                    cJSON_Delete(message_json);
-                }
+                on_incoming_json_(std::string(message_buffer_));
             } else if (event_type == "conversation.chat.requires_action") {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {

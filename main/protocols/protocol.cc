@@ -5,7 +5,7 @@
 #define TAG "Protocol"
 #include <esp_random.h>
 
-void Protocol::OnIncomingJson(std::function<void(const cJSON* root)> callback) {
+void Protocol::OnIncomingJson(std::function<void(const std::string& json_str)> callback) {
     on_incoming_json_ = callback;
 }
 

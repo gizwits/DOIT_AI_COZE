@@ -83,7 +83,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
                 });
             }
         } else if (on_incoming_json_ != nullptr) {
-            on_incoming_json_(root);
+            on_incoming_json_(payload);
         }
         cJSON_Delete(root);
         last_incoming_time_ = std::chrono::steady_clock::now();

@@ -301,6 +301,7 @@ void Application::ToggleChatState() {
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
             AbortSpeaking(kAbortReasonNone);
+            SetDeviceState(kDeviceStateListening);
         });
     } else if (device_state_ == kDeviceStateListening) {
         // 不带屏幕的场景，如果 kill掉了连接，会很困惑
@@ -603,19 +604,20 @@ void Application::Start() {
             SetDeviceState(kDeviceStateIdle);
         });
     });
-    protocol_->OnIncomingJson([this, display](const cJSON* root) {
-        // Parse JSON data
+    protocol_->OnIncomingJson([this, display](const std::string& json_str) {
+        cJSON* root = cJSON_Parse(json_str.c_str());
+        if (!root) return;
         auto type = cJSON_GetObjectItem(root, "type");
-        if (strcmp(type->valuestring, "tts") == 0) {
+        if (type && type->valuestring && strcmp(type->valuestring, "tts") == 0) {
             auto state = cJSON_GetObjectItem(root, "state");
-            if (strcmp(state->valuestring, "start") == 0) {
+            if (state && state->valuestring && strcmp(state->valuestring, "start") == 0) {
                 Schedule([this]() {
                     aborted_ = false;
                     if (device_state_ == kDeviceStateIdle || device_state_ == kDeviceStateListening) {
                         SetDeviceState(kDeviceStateSpeaking);
                     }
                 });
-            } else if (strcmp(state->valuestring, "stop") == 0) {
+            } else if (state && state->valuestring && strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     background_task_->WaitForCompletion();
                     if (device_state_ == kDeviceStateSpeaking) {
@@ -626,37 +628,35 @@ void Application::Start() {
                         }
                     }
                 });
-            } else if (strcmp(state->valuestring, "sentence_start") == 0) {
+            } else if (state && state->valuestring && strcmp(state->valuestring, "sentence_start") == 0) {
                 auto text = cJSON_GetObjectItem(root, "text");
-                if (text != NULL) {
+                if (text && text->valuestring) {
                     ESP_LOGI(TAG, "<< %s", text->valuestring);
                     Schedule([this, display, message = std::string(text->valuestring)]() {
                         display->SetChatMessage("assistant", message.c_str());
                     });
                 }
             }
-        } else if (strcmp(type->valuestring, "stt") == 0) {
+        } else if (type && type->valuestring && strcmp(type->valuestring, "stt") == 0) {
             auto text = cJSON_GetObjectItem(root, "text");
-            if (text != NULL) {
+            if (text && text->valuestring) {
                 ESP_LOGI(TAG, ">> %s", text->valuestring);
                 Schedule([this, display, message = std::string(text->valuestring)]() {
                     display->SetChatMessage("user", message.c_str());
                 });
             }
-        } else if (strcmp(type->valuestring, "llm") == 0) {
+        } else if (type && type->valuestring && strcmp(type->valuestring, "llm") == 0) {
             auto emotion = cJSON_GetObjectItem(root, "emotion");
-            if (emotion != NULL) {
+            if (emotion && emotion->valuestring) {
                 Schedule([this, display, emotion_str = std::string(emotion->valuestring)]() {
                     display->SetEmotion(emotion_str.c_str());
                 });
             }
-        } 
-        else if (strcmp(type->valuestring, "system") == 0) {
+        } else if (type && type->valuestring && strcmp(type->valuestring, "system") == 0) {
             auto command = cJSON_GetObjectItem(root, "command");
-            if (command != NULL) {
+            if (command && command->valuestring) {
                 ESP_LOGI(TAG, "System command: %s", command->valuestring);
                 if (strcmp(command->valuestring, "reboot") == 0) {
-                    // Do a reboot if user requests a OTA update
                     Schedule([this]() {
                         Reboot();
                     });
@@ -664,16 +664,17 @@ void Application::Start() {
                     ESP_LOGW(TAG, "Unknown system command: %s", command->valuestring);
                 }
             }
-        } else if (strcmp(type->valuestring, "alert") == 0) {
+        } else if (type && type->valuestring && strcmp(type->valuestring, "alert") == 0) {
             auto status = cJSON_GetObjectItem(root, "status");
             auto message = cJSON_GetObjectItem(root, "message");
             auto emotion = cJSON_GetObjectItem(root, "emotion");
-            if (status != NULL && message != NULL && emotion != NULL) {
+            if (status && status->valuestring && message && message->valuestring && emotion && emotion->valuestring) {
                 Alert(status->valuestring, message->valuestring, emotion->valuestring, Lang::Sounds::P3_VIBRATION);
             } else {
                 ESP_LOGW(TAG, "Alert command requires status, message and emotion");
             }
         }
+        cJSON_Delete(root);
     });
     bool protocol_started = protocol_->Start();
 
@@ -757,6 +758,11 @@ void Application::Start() {
 }
 
 void Application::PlayMusic(const char* url) {
+    std::string url_str(url);
+    if (url_str.substr(0, 6) == "https:") {
+        url_str = "http:" + url_str.substr(6);
+        url = url_str.c_str();
+    }
     SetDeviceState(kDeviceStateIdle);
     player_.setPacketCallback([this](const std::vector<uint8_t>& data) {
         const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
@@ -768,7 +774,11 @@ void Application::PlayMusic(const char* url) {
                     audio_decode_queue_.size(), max_packets_in_queue);
         }
     });
-    player_.processMP3Stream(url);
+    Schedule([this, url]() {
+        protocol_->CloseAudioChannel();
+        player_.processMP3Stream(url);
+    });
+  
 }
 
 void Application::CancelPlayMusic() {

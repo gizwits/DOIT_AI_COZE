@@ -175,7 +175,9 @@ void __frame_send(vb6824_cmd_t cmd, uint8_t *data, uint16_t len){
         frame->len = SWAP_16(send_len);
         frame->cmd = SWAP_16(cmd);
         
-        memcpy(frame->data, data + idx, (send_len>(len-idx))?(len-idx):send_len);
+        if (data != NULL) {
+            memcpy(frame->data, data + idx, (send_len>(len-idx))?(len-idx):send_len);
+        }
         idx += send_len;
         packet_len = 6 + send_len + 1;
         uint8_t checksum = 0;
@@ -291,6 +293,7 @@ void __vb6824_frame_cb(uint8_t *data, uint16_t len){
     frame->len = SWAP_16(frame->len);
     frame->cmd = SWAP_16(frame->cmd);
     frame->data[frame->len] = 0;
+    // ESP_LOGE(TAG, "vb6824 recv cmd: %04x, len: %d :%.*s", frame->cmd, frame->len, frame->len, frame->data);
 
     switch (frame->cmd)
     {
@@ -314,7 +317,7 @@ void __vb6824_frame_cb(uint8_t *data, uint16_t len){
         break;
     } 
     case VB6824_CMD_RECV_CTL:{
-        ESP_LOGI(TAG, "vb6824 recv cmd: %04x, len: %d :%.*s", frame->cmd, frame->len, frame->len, frame->data);
+        // ESP_LOGI(TAG, "vb6824 recv cmd: %04x, len: %d :%.*s", frame->cmd, frame->len, frame->len, frame->data);
         if(g_voice_command_cb){
             g_voice_command_cb((char *)frame->data, frame->len, g_voice_command_cb_arg);
         }
@@ -385,7 +388,7 @@ void vb6824_audio_set_output_volume(uint8_t volume){
 }
 
 void vb6824_shutdown(void){
-    __frame_send(VB6824_CMD_SEND_SHUTDOWN, NULL, 0);
+    __frame_send(VB6824_CMD_SEND_SHUTDOWN, NULL, 1);
 }
 
 void vb6824_audio_write(uint8_t *data, uint16_t len){

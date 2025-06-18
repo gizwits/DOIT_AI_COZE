@@ -49,7 +49,7 @@ public:
     }
 
     void OnIncomingAudio(std::function<void(std::vector<uint8_t>&& data)> callback);
-    void OnIncomingJson(std::function<void(const cJSON* root)> callback);
+    void OnIncomingJson(std::function<void(const std::string& json_str)> callback);
     void OnAudioChannelOpened(std::function<void()> callback);
     void OnAudioChannelClosed(std::function<void()> callback);
     void OnNetworkError(std::function<void(const std::string& message)> callback);
@@ -71,7 +71,7 @@ public:
     virtual const RoomParams& GetRoomParams() const { return room_params_; }
 
 protected:
-    std::function<void(const cJSON* root)> on_incoming_json_;
+    std::function<void(const std::string& json_str)> on_incoming_json_;
     std::function<void(std::vector<uint8_t>&& data)> on_incoming_audio_;
     std::function<void()> on_audio_channel_opened_;
     std::function<void()> on_audio_channel_closed_;

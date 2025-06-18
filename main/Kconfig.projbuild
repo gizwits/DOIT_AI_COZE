@@ -136,6 +136,8 @@ choice BOARD_TYPE
         bool "四博智联AI陪伴盒子"
     config BOARD_TYPE_MIXGO_NOVA
         bool "元控·青春"
+    config BOARD_TYPE_GIZWITS_AI_C2
+        bool "Gizwits-AI-C2"
     config BOARD_TYPE_DOIT_AI_01_KIT
         bool "Doit-AI-01-Kit"
     config BOARD_TYPE_DOIT_AI_01_KIT_LIGHT

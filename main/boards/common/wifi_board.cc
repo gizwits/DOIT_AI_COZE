@@ -42,6 +42,8 @@ void OnWifiConfigEvent(WifiConfigEvent event, const std::string& message) {
     switch (event) {
         case WifiConfigEvent::CONFIG_PACKET_RECEIVED:
             ESP_LOGI("APP", "收到配置包: %s", message.c_str());
+            auto& application = Application::GetInstance();
+            application.PlaySound(Lang::Sounds::P3_CONNECTING);
             break;
     }
 }
