@@ -55,7 +55,6 @@ void PowerSaveTimer::OnShutdownRequest(std::function<void()> callback) {
 void PowerSaveTimer::PowerSaveCheck() {
     auto& app = Application::GetInstance();
     if (!in_sleep_mode_ && !app.CanEnterSleepMode()) {
-        ESP_LOGI(TAG, "reset ticks");
         ticks_ = 0;
         return;
     }

@@ -8,6 +8,7 @@
 BackgroundTask::BackgroundTask(uint32_t stack_size) {
     xTaskCreate([](void* arg) {
         BackgroundTask* task = (BackgroundTask*)arg;
+        
         task->BackgroundTaskLoop();
     }, "background_task", stack_size, this, 2, &background_task_handle_);
 }
@@ -49,7 +50,10 @@ void BackgroundTask::WaitForCompletion() {
 
 void BackgroundTask::BackgroundTaskLoop() {
     ESP_LOGI(TAG, "background_task started");
+    
     while (true) {
+        // 重置看门狗
+        
         std::unique_lock<std::mutex> lock(mutex_);
         condition_variable_.wait(lock, [this]() { return !main_tasks_.empty(); });
         
@@ -57,6 +61,7 @@ void BackgroundTask::BackgroundTaskLoop() {
         lock.unlock();
 
         for (auto& task : tasks) {
+            // 每个任务执行前都重置看门狗
             task();
         }
     }

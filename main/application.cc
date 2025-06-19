@@ -46,6 +46,9 @@ static const char* const STATE_STRINGS[] = {
 
 Application::Application() {
     event_group_ = xEventGroupCreate();
+     // 初始化看门狗
+    auto& watchdog = Watchdog::GetInstance();
+    watchdog.Initialize(10, true);  // 10秒超时，超时后触发系统复位
 #if (defined(CONFIG_IDF_TARGET_ESP32C2) || defined(CONFIG_IDF_TARGET_ESP32C3))
 #if (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS) && defined(CONFIG_USE_AUDIO_CODEC_DECODE_OPUS))
     background_task_ = new BackgroundTask(2048);
@@ -361,9 +364,8 @@ void Application::StopListening() {
 }
 
 void Application::Start() {
-    // 初始化看门狗
+   
     auto& watchdog = Watchdog::GetInstance();
-    watchdog.Initialize(10, true);  // 10秒超时，超时后触发系统复位
     
     auto& board = Board::GetInstance();
     Auth::getInstance().init();
@@ -460,14 +462,15 @@ void Application::Start() {
             Schedule([this]() {
                 protocol_->SendAbortSpeaking(kAbortReasonNone);
                 SetDeviceState(kDeviceStateIdle);
-                vTaskDelay(pdMS_TO_TICKS(500));
                 protocol_->CloseAudioChannel();
+                ResetDecoder();
                 PlaySound(Lang::Sounds::P3_CONFIG_SUCCESS);
             });
         } else {
             // 没有连接的情况下，不用动，按照小智的流程，等待下一个触发点
             // 如果是第一次获取到配置，则不需要提示
             if (!protocol_->GetRoomParams().access_token.empty()) {
+                ResetDecoder();
                 PlaySound(Lang::Sounds::P3_CONFIG_SUCCESS);
             }
         }
@@ -1244,12 +1247,13 @@ void Application::Reboot() {
 
 void Application::WakeWordInvoke(const std::string& wake_word) {
     mqtt_client_.sendTraceLog("info", "唤醒词触发");
+    ESP_LOGI(TAG, "Wake word invoke: %s", wake_word.c_str());
 
 #ifdef CONFIG_UES_CHAT_MODE_BUTTON
-    ESP_LOGI(TAG, "Wake word invoke");
     return;
 #else
     if (device_state_ == kDeviceStateIdle) {
+        ResetDecoder();
         PlaySound(Lang::Sounds::P3_SUCCESS);
         vTaskDelay(pdMS_TO_TICKS(300));
         ToggleChatState();

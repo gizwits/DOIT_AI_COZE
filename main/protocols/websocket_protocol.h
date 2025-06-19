@@ -6,6 +6,7 @@
 #include <web_socket.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
+#include <freertos/task.h>
 
 #define WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT (1 << 0)
 
@@ -25,6 +26,7 @@ public:
 private:
     WebSocket* websocket_ = nullptr;
     EventGroupHandle_t event_group_handle_;
+    TaskHandle_t close_task_handle_ = nullptr;
     std::string message_cache_;
     bool is_first_packet_ = true;
     std::vector<uint8_t> audio_data_buffer_;  // Reuse buffer for Ogg data
@@ -35,6 +37,7 @@ private:
 
     void ParseServerHello(const cJSON* root);
     bool SendText(const std::string& text) override;
+    static void CloseAudioChannelTask(void* param);
 };
 
 #endif

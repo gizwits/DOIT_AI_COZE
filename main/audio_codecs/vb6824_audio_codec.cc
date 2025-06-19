@@ -21,6 +21,7 @@ static const char *TAG = "VbAduioCodec";
 
 void VbAduioCodec::WakeUp(std::string command) {
     if (on_wake_up_) {
+        ESP_LOGE(TAG, "on_wake_up_");
         on_wake_up_(command);
     }
 }
