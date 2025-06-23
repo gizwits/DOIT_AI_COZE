@@ -13,6 +13,7 @@
 #include <functional>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "watchdog.h"
 
 #define TAG "Player"
 #define BUFFER_SIZE 4096
@@ -25,11 +26,11 @@ struct Player::Impl {
     char* buffer;
     size_t buffer_pos;
     size_t buffer_size;
-    bool is_downloading;
+    bool is_downloading_;
     std::function<void(const std::vector<uint8_t>&)> packet_callback;
     size_t packets_processed;  // 已处理的数据包数量
 
-    Impl() : buffer_pos(0), buffer_size(0), is_downloading(false), packets_processed(0) {
+    Impl() : buffer_pos(0), buffer_size(0), is_downloading_(false), packets_processed(0) {
         buffer = new char[BUFFER_SIZE];
     }
 
@@ -99,7 +100,8 @@ struct Player::Impl {
     }
 
     void stop() {
-        is_downloading = false;
+        ESP_LOGI(TAG, "Player stop called, cleaning up...");
+        is_downloading_ = false;
     }
 
     void setPacketCallback(std::function<void(const std::vector<uint8_t>&)> callback) {
@@ -107,6 +109,7 @@ struct Player::Impl {
     }
 
     bool processMP3Stream(const char* url) {
+        ESP_LOGI(TAG, "processMP3Stream: %s", url);
         auto& board = Board::GetInstance();
         auto http = board.CreateHttp();
         
@@ -116,15 +119,33 @@ struct Player::Impl {
             return false;
         }
 
-        is_downloading = true;
+
+        size_t content_length = http->GetBodyLength();
+        if (content_length == 0) {
+            ESP_LOGE(TAG, "Failed to get content length");
+            delete http;
+            return false;
+        }
+
+        auto status_code = http->GetStatusCode();
+        ESP_LOGI(TAG, "status_code: %d", status_code);
+
+        is_downloading_ = true;
         packets_processed = 0;
 
         // 流式读取数据
-        while (is_downloading) {
+        while (is_downloading_) {
             if (!read_chunk(http)) {
                 break;
             }
+            Watchdog::GetInstance().Reset();
         }
+
+
+        // 清理缓冲区
+        buffer_pos = 0;
+        buffer_size = 0;
+        packets_processed = 0;
 
         delete http;
         return true;
@@ -133,6 +154,10 @@ struct Player::Impl {
 
 Player::Player() : impl_(std::make_unique<Impl>()) {}
 Player::~Player() = default;
+
+bool Player::IsDownloading() const {
+    return impl_->is_downloading_;
+}
 
 void Player::setPacketCallback(std::function<void(const std::vector<uint8_t>&)> callback) {
     impl_->setPacketCallback(callback);

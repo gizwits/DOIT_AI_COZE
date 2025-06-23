@@ -140,6 +140,8 @@ choice BOARD_TYPE
         bool "Gizwits-AI-C2"
     config BOARD_TYPE_DOIT_AI_01_KIT
         bool "Doit-AI-01-Kit"
+    config BOARD_TYPE_DOIT_AI_01_KIT_DEV
+        bool "Doit-AI-01-Kit-dev"
     config BOARD_TYPE_DOIT_AI_01_KIT_LIGHT
         bool "Doit-AI-01-Kit-light"
     config BOARD_TYPE_DOIT_AI_01_KIT_BUTTON

@@ -22,7 +22,7 @@
 #include <esp_wifi_types.h>
 #include <esp_task_wdt.h>
 #include "player/player.h"
-
+#include "sentry/error_monitor.h"
 
 #define TAG "Application"
 
@@ -282,10 +282,15 @@ void Application::PlaySound(const std::string_view& sound) {
 }
 
 void Application::ToggleChatState() {
+
+
     if (device_state_ == kDeviceStateActivating) {
         SetDeviceState(kDeviceStateIdle);
         return;
     }
+
+    // 停止播放，里面会判断是否正在播放
+    CancelPlayMusic();
 
     if (!protocol_) {
         ESP_LOGE(TAG, "Protocol not initialized");
@@ -294,6 +299,7 @@ void Application::ToggleChatState() {
 
     if (device_state_ == kDeviceStateIdle) {
         Schedule([this]() {
+            
             SetDeviceState(kDeviceStateConnecting);
             if (!protocol_->OpenAudioChannel()) {
                 return;
@@ -756,36 +762,54 @@ void Application::Start() {
     // PlayMusic();
     // Enter the main event loop
 
+    report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "设备重启完成", NULL);
+
     watchdog.SubscribeTask(xTaskGetCurrentTaskHandle());
     MainEventLoop();
+}
+
+void Application::QuitTalking() {
+    Schedule([this]() {
+        protocol_->SendAbortSpeaking(kAbortReasonNone);
+        SetDeviceState(kDeviceStateIdle);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        protocol_->CloseAudioChannel();
+    });
 }
 
 void Application::PlayMusic(const char* url) {
     std::string url_str(url);
     if (url_str.substr(0, 6) == "https:") {
         url_str = "http:" + url_str.substr(6);
-        url = url_str.c_str();
     }
-    SetDeviceState(kDeviceStateIdle);
-    player_.setPacketCallback([this](const std::vector<uint8_t>& data) {
-        const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (audio_decode_queue_.size() < max_packets_in_queue) {
-            audio_decode_queue_.emplace_back(std::move(data));
-        } else {
-            ESP_LOGW("AUDIO", "Audio decode queue is full! Current size: %d, Max size: %d", 
-                    audio_decode_queue_.size(), max_packets_in_queue);
-        }
-    });
-    Schedule([this, url]() {
-        protocol_->CloseAudioChannel();
-        player_.processMP3Stream(url);
-    });
+     // 新增：如果以 .mp3 结尾，替换为 .p3
+    if (url_str.size() >= 4 && url_str.substr(url_str.size() - 4) == ".mp3") {
+        url_str.replace(url_str.size() - 4, 4, ".p3");
+    }
+    
+    QuitTalking();
   
+    Schedule([this, url_str]() {
+        player_.setPacketCallback([this](const std::vector<uint8_t>& data) {
+            const int max_packets_in_queue = 2000 / OPUS_FRAME_DURATION_MS;
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (audio_decode_queue_.size() < max_packets_in_queue) {
+                audio_decode_queue_.emplace_back(std::move(data));
+            } else {
+                ESP_LOGW("AUDIO", "Audio decode queue is full! Current size: %d, Max size: %d", 
+                        audio_decode_queue_.size(), max_packets_in_queue);
+            }
+        });
+        player_.processMP3Stream(url_str.c_str());
+    });
 }
 
 void Application::CancelPlayMusic() {
-    player_.stop();
+    ESP_LOGI(TAG, "Cancel play music");
+    if (player_.IsDownloading()) {
+        ESP_LOGI(TAG, "Cancel play music 1");
+        player_.stop();
+    }
 }
 
 void Application::OnClockTimer() {
@@ -905,11 +929,11 @@ void Application::OnAudioOutput() {
         return;
     }
 
-    if (device_state_ == kDeviceStateListening) {
-        audio_decode_queue_.clear();
-        audio_decode_cv_.notify_all();
-        return;
-    }
+    // if (device_state_ == kDeviceStateListening) {
+    //     audio_decode_queue_.clear();
+    //     audio_decode_cv_.notify_all();
+    //     return;
+    // }
 
     auto opus = std::move(audio_decode_queue_.front());
     audio_decode_queue_.pop_front();
@@ -1082,6 +1106,10 @@ void Application::AbortSpeaking(AbortReason reason) {
     ESP_LOGI(TAG, "Abort speaking");
     mqtt_client_.sendTraceLog("info", "打断AI说话");
     aborted_ = true;
+    
+    // 等待所有后台任务完成，避免竞争条件
+    background_task_->WaitForCompletion();
+    
     protocol_->SendAbortSpeaking(reason);
     SetDeviceState(kDeviceStateListening);
 }
@@ -1193,6 +1221,9 @@ void Application::SetDeviceState(DeviceState state) {
 }
 
 void Application::ResetDecoder() {
+    // 等待所有后台任务完成，确保没有正在进行的音频处理
+    background_task_->WaitForCompletion();
+    
     std::lock_guard<std::mutex> lock(mutex_);
 #ifdef CONFIG_USE_AUDIO_CODEC_DECODE_OPUS
 #else
@@ -1253,14 +1284,15 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
     return;
 #else
     if (device_state_ == kDeviceStateIdle) {
+        CancelPlayMusic();
         ResetDecoder();
         PlaySound(Lang::Sounds::P3_SUCCESS);
         vTaskDelay(pdMS_TO_TICKS(300));
         ToggleChatState();
         Schedule([this, wake_word]() {
-            if (protocol_) {
-                protocol_->SendWakeWordDetected(wake_word); 
-            }
+            // if (protocol_) {
+            //     protocol_->SendWakeWordDetected(wake_word); 
+            // }
         }); 
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
@@ -1271,6 +1303,8 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
             vTaskDelay(pdMS_TO_TICKS(300));
             SetDeviceState(kDeviceStateListening);
         });
+    } else if (device_state_ == kDeviceStateListening) { 
+        PlaySound(Lang::Sounds::P3_SUCCESS);
     }
 #endif
 }

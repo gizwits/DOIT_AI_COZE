@@ -17,8 +17,8 @@
 static const char* TAG = "ErrorMonitor";
 
 #define ERROR_MONITOR_URL "http://appmonitor.gizwits.com/api/%s/store/?sentry_key=%s&sentry_version=7"
-#define SENTRY_KEY "196c7169992d49ee951a09576aaa050a"
-#define PROJECT_ID "88"
+#define SENTRY_KEY "15913416285f414091919ab7134c9152"
+#define PROJECT_ID "89"
 #define UPLOAD_TASK_STACK_SIZE 8192
 
 std::string device_id;  // MAC address as device ID
@@ -221,15 +221,12 @@ static esp_err_t _report_error(error_type_t type, error_level_t level,
 
     std::string content(post_data, strlen(post_data));
     http->SetContent(std::move(content));
-
-    esp_err_t err = http->Open("POST", url);
-    
     free(post_data);  // Free the JSON string
-    
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "HTTP POST request failed: %s (error code: %d)", esp_err_to_name(err), err);
+
+    if (!http->Open("POST", url)) {
+        ESP_LOGE(TAG, "Failed to open HTTP connection");
         delete http;
-        return err;
+        return -1;
     }
     
     ESP_LOGI(TAG, "HTTP connection opened successfully");
@@ -239,12 +236,12 @@ static esp_err_t _report_error(error_type_t type, error_level_t level,
     ESP_LOGI(TAG, "Received HTTP response with status code: %d", status_code);
     
     // Read response content
-    std::string response = http->ReadAll();
-    if (!response.empty()) {
-        ESP_LOGI(TAG, "Response body (%zu bytes): %s", response.length(), response.c_str());
-    } else {
-        ESP_LOGW(TAG, "Empty response body received");
-    }
+    // std::string response = http->ReadAll();
+    // if (!response.empty()) {
+    //     ESP_LOGI(TAG, "Response body (%zu bytes): %s", response.length(), response.c_str());
+    // } else {
+    //     ESP_LOGW(TAG, "Empty response body received");
+    // }
     
     http->Close();
     delete http;
@@ -305,27 +302,27 @@ esp_err_t error_monitor_init(void) {
 
 esp_err_t report_error(error_type_t type, error_level_t level, 
                       const char* message, const char* stack) {
-    // auto params = std::make_unique<ErrorReportParams>();
-    // params->type = type;
-    // params->level = level;
-    // if (message) params->message = message;
-    // if (stack) params->stack = stack;
+    auto params = std::make_unique<ErrorReportParams>();
+    params->type = type;
+    params->level = level;
+    if (message) params->message = message;
+    if (stack) params->stack = stack;
     
-    // BaseType_t result = xTaskCreate(
-    //     report_error_task,
-    //     "report_error",
-    //     8192 / 2,
-    //     params.release(),
-    //     5,
-    //     NULL
-    // );
+    BaseType_t result = xTaskCreate(
+        report_error_task,
+        "report_error",
+        8192 / 2,
+        params.release(),
+        5,
+        NULL
+    );
     
-    // if (result != pdPASS) {
-    //     ESP_LOGE(TAG, "Failed to create error report task");
-    //     return ESP_FAIL;
-    // }
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create error report task");
+        return ESP_FAIL;
+    }
     
-    // ESP_LOGI(TAG, "Error report task created successfully");
+    ESP_LOGI(TAG, "Error report task created successfully");
     return ESP_OK;
 }
 

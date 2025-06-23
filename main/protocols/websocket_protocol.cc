@@ -267,9 +267,14 @@ bool WebsocketProtocol::OpenAudioChannel() {
                         (const unsigned char*)base64_content.data(), 
                         base64_content.length());
 
-                    // Reuse buffer for decoded data
+                    // Smart buffer management: only grow if necessary, shrink if buffer is too large
                     if (output_len > audio_data_buffer_.capacity()) {
                         audio_data_buffer_.reserve(output_len);
+                    } else if (audio_data_buffer_.capacity() > output_len * 4) {
+                        // If buffer is more than 4x larger than needed, shrink it
+                        std::vector<uint8_t> new_buffer;
+                        new_buffer.reserve(output_len);
+                        audio_data_buffer_.swap(new_buffer);
                     }
                     audio_data_buffer_.resize(output_len);
 
@@ -347,6 +352,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
             } else if (event_type == "conversation.chat.requires_action") {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {
+                report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "coze socket error", str_data.data());
                 ESP_LOGE(TAG, "Error: %s", str_data.data());
                 if (on_log_) {
                     on_log_("error", str_data.data());

@@ -68,8 +68,8 @@ bool Ota::CheckVersion() {
     gserver.getFirmwareUpdate(
         hw_version.c_str(),
         current_version_.c_str(),
-        [this, &has_update](const char* package_type, const char* package_md5, const char* package_url) {
-            firmware_version_ = package_type;
+        [this, &has_update](const char* package_type, const char* package_md5, const char* package_url, const char* sw_version) {
+            firmware_version_ = sw_version;
             firmware_url_ = package_url;
             
             // Compare versions before setting has_update

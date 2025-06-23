@@ -105,9 +105,9 @@ public:
             ESP_LOGE(TAG, "vb6824 recv cmd: %s", command.c_str());
             if (command == "你好小智" || command.find("小云") != std::string::npos){
                 ESP_LOGE(TAG, "vb6824 recv cmd: %d", Application::GetInstance().GetDeviceState());
-                // if(Application::GetInstance().GetDeviceState() != kDeviceStateListening){
-                // }
-                Application::GetInstance().WakeWordInvoke("你好小智");
+                if(Application::GetInstance().GetDeviceState() != kDeviceStateListening){
+                    Application::GetInstance().WakeWordInvoke("你好小智");
+                }
             } else if (command == "开始配网") {
                 ResetWifiConfiguration();
             }
