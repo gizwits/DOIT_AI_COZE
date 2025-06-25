@@ -1224,6 +1224,9 @@ void Application::ResetDecoder() {
     // 等待所有后台任务完成，确保没有正在进行的音频处理
     background_task_->WaitForCompletion();
     
+    // 设置标志位，防止新的音频处理开始
+    busy_decoding_audio_ = true;
+    
     std::lock_guard<std::mutex> lock(mutex_);
 #ifdef CONFIG_USE_AUDIO_CODEC_DECODE_OPUS
 #else
@@ -1235,6 +1238,9 @@ void Application::ResetDecoder() {
     
     auto codec = Board::GetInstance().GetAudioCodec();
     codec->EnableOutput(true);
+    
+    // 重置标志位
+    busy_decoding_audio_ = false;
 }
 
 void Application::SetDecodeSampleRate(int sample_rate, int frame_duration) {
