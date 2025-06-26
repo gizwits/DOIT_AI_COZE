@@ -1221,12 +1221,6 @@ void Application::SetDeviceState(DeviceState state) {
 }
 
 void Application::ResetDecoder() {
-    // 等待所有后台任务完成，确保没有正在进行的音频处理
-    background_task_->WaitForCompletion();
-    
-    // 设置标志位，防止新的音频处理开始
-    busy_decoding_audio_ = true;
-    
     std::lock_guard<std::mutex> lock(mutex_);
 #ifdef CONFIG_USE_AUDIO_CODEC_DECODE_OPUS
 #else
@@ -1235,12 +1229,8 @@ void Application::ResetDecoder() {
     audio_decode_queue_.clear();
     audio_decode_cv_.notify_all();
     last_output_time_ = std::chrono::steady_clock::now();
-    
     auto codec = Board::GetInstance().GetAudioCodec();
     codec->EnableOutput(true);
-    
-    // 重置标志位
-    busy_decoding_audio_ = false;
 }
 
 void Application::SetDecodeSampleRate(int sample_rate, int frame_duration) {
@@ -1290,27 +1280,30 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
     return;
 #else
     if (device_state_ == kDeviceStateIdle) {
-        CancelPlayMusic();
-        ResetDecoder();
-        PlaySound(Lang::Sounds::P3_SUCCESS);
-        vTaskDelay(pdMS_TO_TICKS(300));
-        ToggleChatState();
+        
         Schedule([this, wake_word]() {
             // if (protocol_) {
             //     protocol_->SendWakeWordDetected(wake_word); 
             // }
-        }); 
-    } else if (device_state_ == kDeviceStateSpeaking) {
-        Schedule([this]() {
-            // 打断AI
-            protocol_->SendAbortSpeaking(kAbortReasonNone);
+            CancelPlayMusic();
             ResetDecoder();
             PlaySound(Lang::Sounds::P3_SUCCESS);
             vTaskDelay(pdMS_TO_TICKS(300));
+            ToggleChatState();
+        }); 
+    } else if (device_state_ == kDeviceStateSpeaking) {
+        Schedule([this]() {
+            protocol_->SendAbortSpeaking(kAbortReasonNone);
+            ResetDecoder();
+            PlaySound(Lang::Sounds::P3_SUCCESS);
             SetDeviceState(kDeviceStateListening);
         });
+        
     } else if (device_state_ == kDeviceStateListening) { 
-        PlaySound(Lang::Sounds::P3_SUCCESS);
+        // Schedule([this]() {
+        //     ResetDecoder();
+        //     PlaySound(Lang::Sounds::P3_SUCCESS);
+        // });
     }
 #endif
 }

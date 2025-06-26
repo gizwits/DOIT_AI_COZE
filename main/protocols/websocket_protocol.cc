@@ -352,8 +352,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
             } else if (event_type == "conversation.chat.requires_action") {
                 CozeMCPParser::getInstance().handle_mcp(str_data);
             } else if (event_type == "error") {
-                report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "coze socket error", str_data.data());
-                ESP_LOGE(TAG, "Error: %s", str_data.data());
+                std::string string = "coze socket error " + std::string(str_data.data());
+                report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, string.c_str(), NULL);
                 if (on_log_) {
                     on_log_("error", str_data.data());
                 }
