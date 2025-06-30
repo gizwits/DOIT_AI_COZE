@@ -151,8 +151,10 @@ bool MqttClient::initialize() {
         msg.topic_len = topic.length();
         msg.payload = strdup(payload.c_str());
         msg.payload_len = payload.length();
-        msg.data = msg.payload;
-        msg.data_len = msg.payload_len;
+        msg.data = static_cast<char*>(malloc(payload.size()));
+        
+        memcpy(msg.data, payload.data(), payload.size());
+        msg.data_len = payload.size();
         
         if (message_queue_) {
             xQueueSendToBack(message_queue_, &msg, portMAX_DELAY);
@@ -196,11 +198,13 @@ bool MqttClient::initialize() {
     std::string response_topic = "llm/" + client_id_ + "/config/response";
     std::string push_topic = "llm/" + client_id_ + "/config/push";
     std::string server_notify_topic = "ser2cli_res/" + client_id_;
+    std::string p0_notify_topic = "app2dev/" + client_id_ + "/+";
     
     ESP_LOGI(TAG, "Subscribing to topics:");
     ESP_LOGI(TAG, "  %s (QoS 0)", response_topic.c_str());
     ESP_LOGI(TAG, "  %s (QoS 1)", push_topic.c_str());
     ESP_LOGI(TAG, "  %s (QoS 1)", server_notify_topic.c_str());
+    ESP_LOGI(TAG, "  %s (QoS 0)", p0_notify_topic.c_str());
     
     vTaskDelay(pdMS_TO_TICKS(10));
     if (mqtt_->Subscribe(response_topic, 0) != 0) {
@@ -216,6 +220,10 @@ bool MqttClient::initialize() {
     if (mqtt_->Subscribe(server_notify_topic, 1) != 0) {
         ESP_LOGE(TAG, "Failed to subscribe to server notify topic");
         sendTraceLog("error", "订阅 通知 失败");
+    }
+    if (mqtt_->Subscribe(p0_notify_topic, 0) != 0) {
+        ESP_LOGE(TAG, "Failed to subscribe to p0 notify topic");
+        sendTraceLog("error", "订阅 p0 通知 失败");
     }
     
     // 获取房间信息
@@ -474,9 +482,101 @@ bool MqttClient::parseM2MCtrlMsg(const char* in_str, int in_len) {
     return true;
 }
 
+
+uint8_t MqttClient::mqttNumRemLenBytes(const uint8_t *buf) {
+    uint8_t num_bytes = 0;
+    uint32_t multiplier = 1;
+    uint32_t value = 0;
+    uint8_t encoded_byte;
+
+    do {
+        if (num_bytes >= 4) {
+            // 超过最大字节数，返回错误
+            return 0;
+        }
+        encoded_byte = buf[num_bytes++];
+        value += (encoded_byte & 0x7F) * multiplier;
+        multiplier *= 128;
+    } while ((encoded_byte & 0x80) != 0);
+
+    // printf("%s Buffer contents[%d]: ",__func__, num_bytes);
+    // for (uint8_t i = 0; i < num_bytes; i++) {
+    //     printf("%02x ", buf[i]);
+    // }
+    // printf("\n");
+    return num_bytes;
+}
+
+// 参考数据解析函数
+void MqttClient::app2devMsgHandler(const uint8_t *data, int32_t len)
+{
+    // 打印前4字节
+    if (len >= 4) {
+        ESP_LOGI(TAG, "payload[0-3]: %02X %02X %02X %02X", data[0], data[1], data[2], data[3]);
+    }
+    if (len < 11) { // 确保数据长度至少为固定包头(4) + 可变长度(1) + Flag(1) + 命令字(2) + 包序号(4)
+        ESP_LOGE(TAG, "Data length too short");
+        return;
+    }
+
+    // 解析固定包头
+    uint32_t fixed_header = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    if (fixed_header != GAGENT_PROTOCOL_VERSION) {
+        ESP_LOGE(TAG, "Invalid fixed header");
+        return;
+    }
+
+    // 解析可变长度
+    uint8_t var_len = mqttNumRemLenBytes(data + 4);
+    if (var_len == 0 || var_len > len - 4) {
+        ESP_LOGE(TAG, "Invalid variable length");
+        return;
+    }
+    else {
+        ESP_LOGI(TAG, "var_len: %d", var_len);
+    }
+
+    // 解析Flag
+    uint8_t flag = data[4 + var_len];
+
+    // 解析命令字
+    uint16_t command = (data[5 + var_len] << 8) | data[6 + var_len];
+    if (command != HI_CMD_PAYLOAD93) {
+        ESP_LOGE(TAG, "Invalid command");
+        // todo 目前只处理93数据点业务
+        return;
+    }
+
+    // 解析包序号
+    uint32_t sn = (data[7 + var_len] << 24) | (data[8 + var_len] << 16) | (data[9 + var_len] << 8) | data[10 + var_len];
+
+    // 解析业务指令
+    const uint8_t *business_instruction = data + 11 + var_len;
+    int business_instruction_len = len - (11 + var_len);
+    if (business_instruction_len > 65535) {
+        ESP_LOGE(TAG, "Business instruction too long");
+        return;
+    }
+
+    // 只处理93业务指令
+    ESP_LOGI(TAG, "business_instruction: %d", command);
+    if (command == 0x0093) {
+        ESP_LOGI(TAG, "business_instruction: %s", business_instruction);
+        hexdump("business_instruction", business_instruction, business_instruction_len);
+        // 先 hardcode 处理最后一个字节
+        uint8_t last_byte = business_instruction[business_instruction_len - 1];
+        ESP_LOGI(TAG, "last_byte: %d", last_byte);
+        if (last_byte == 0x00 || last_byte == 0x01 || last_byte == 0x02) {
+            Application::GetInstance().SetChatMode(last_byte);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            esp_restart();
+        }
+    }
+    // gatAppData2Local(command, sn, business_instruction, business_instruction_len);
+}
+
 void MqttClient::handleMqttMessage(mqtt_msg_t* msg) {
     if (!msg) return;
-    ESP_LOGI(TAG, "handleMqttMessage topic: %s, payload: %s", msg->topic, msg->payload);
     if (strstr(msg->topic, "response")) {
         room_params_t params = {0};
         if (parseRealtimeAgent(msg->payload, msg->payload_len, &params)) {
@@ -508,6 +608,8 @@ void MqttClient::handleMqttMessage(mqtt_msg_t* msg) {
                 // run_start_ota_task(result.version_info.module_sw_ver, result.version_info.download_url);
             }
         }
+    } else if (strstr(msg->topic, "app2dev")) {
+        app2devMsgHandler(reinterpret_cast<const uint8_t*>(msg->data), msg->data_len);
     }
 }
 
@@ -528,4 +630,20 @@ void MqttClient::sendTraceLog(const char* level, const char* message) {
     if (!publish(topic, std::string(payload))) {
         ESP_LOGE(TAG, "Failed to publish log message");
     }
+}
+
+// Upload binary p0 data to dev2app/<client_id_>
+bool MqttClient::uploadP0Data(const void* data, size_t data_len) {
+    if (!mqtt_) {
+        ESP_LOGE(TAG, "MQTT client not initialized for uploadP0Data");
+        return false;
+    }
+    std::string topic = "dev2app/" + client_id_;
+    // Publish binary data (assume mqtt_->Publish can take std::string with binary data)
+    // If not, this should be adapted to the actual API
+    bool result = mqtt_->Publish(topic, std::string(static_cast<const char*>(data), data_len));
+    if (!result) {
+        ESP_LOGE(TAG, "Failed to publish p0 data to %s", topic.c_str());
+    }
+    return result;
 }

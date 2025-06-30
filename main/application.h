@@ -71,6 +71,8 @@ public:
     void AbortSpeaking(AbortReason reason);
     void ToggleChatState();
     void StartListening();
+    bool GetChatMode() const { return chat_mode_; }
+    void SetChatMode(int mode);
     void StopListening();
     void UpdateIotStates();
     void Reboot();
@@ -114,15 +116,13 @@ private:
     std::unique_ptr<Protocol> protocol_;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
+    esp_timer_handle_t report_timer_handle_ = nullptr;
     volatile DeviceState device_state_ = kDeviceStateUnknown;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
     MqttClient mqtt_client_;
-#if CONFIG_USE_REALTIME_CHAT
-    bool realtime_chat_enabled_ = true;
+    // int chat_mode_: 0=button, 1=wake word, 2=realtime
+    int chat_mode_ = 1;
     bool realtime_chat_is_start_ = false;
-#else
-    bool realtime_chat_enabled_ = false;
-#endif
     bool aborted_ = false;
     bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
@@ -160,6 +160,8 @@ private:
     void OnClockTimer();
     void SetListeningMode(ListeningMode mode);
     void AudioLoop();
+    void OnReportTimer();
+    void StartReportTimer();
 };
 
 #endif // _APPLICATION_H_

@@ -12,8 +12,21 @@
 #include "cJSON.h"
 #include "protocols/protocol.h"
 
+#define GAGENT_PROTOCOL_VERSION     (0x00000003)
+#define HI_CMD_PAYLOAD93            0x0093
+#define HI_CMD_UPLOADACK94          0x0094
+#define HI_CMD_MQTT_RESET           0x021E
 #define MQTT_REQUEST_FAILURE_COUNT 10
 
+#define hexdump(pName, buf, len) do { \
+    if (pName) { \
+        printf("%s: ", pName); \
+    } \
+    for (size_t i = 0; i < len; i++) { \
+        printf("%02X ", ((const uint8_t *)(buf))[i]); \
+    } \
+    printf("\n"); \
+} while (0)
 // MQTT message structure
 typedef struct {
     char* topic;
@@ -56,7 +69,11 @@ public:
     void OnRoomParamsUpdated(std::function<void(const RoomParams&)> callback);
     void sendOtaProgressReport(int progress, const char* status);
     void deinit();
+    
     void sendTraceLog(const char* level, const char* message);
+
+    // Upload binary p0 data to dev2app/<client_id_>
+    bool uploadP0Data(const void* data, size_t data_len);
 
     MqttClient() = default;
     ~MqttClient() = default;
@@ -86,4 +103,6 @@ private:
     bool parseRealtimeAgent(const char* in_str, int in_len, room_params_t* params);
     bool parseM2MCtrlMsg(const char* in_str, int in_len);
     void handleMqttMessage(mqtt_msg_t* msg);
+    void app2devMsgHandler(const uint8_t *data, int32_t len);
+    uint8_t mqttNumRemLenBytes(const uint8_t *buf);
 };

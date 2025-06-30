@@ -49,6 +49,9 @@ Application::Application() {
      // 初始化看门狗
     auto& watchdog = Watchdog::GetInstance();
     watchdog.Initialize(10, true);  // 10秒超时，超时后触发系统复位
+    // 初始化时从设置读取 chat_mode
+    Settings settings("wifi", false);
+    chat_mode_ = settings.GetInt("chat_mode", 1); // 0=按键说话, 1=唤醒词, 2=自然对话
 #if (defined(CONFIG_IDF_TARGET_ESP32C2) || defined(CONFIG_IDF_TARGET_ESP32C3))
 #if (defined(CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS) && defined(CONFIG_USE_AUDIO_CODEC_DECODE_OPUS))
     background_task_ = new BackgroundTask(2048);
@@ -305,7 +308,7 @@ void Application::ToggleChatState() {
                 return;
             }
 
-            SetListeningMode(realtime_chat_enabled_ ? kListeningModeRealtime : kListeningModeAutoStop);
+            SetListeningMode(chat_mode_ == 2 ? kListeningModeRealtime : kListeningModeAutoStop);
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
@@ -391,7 +394,7 @@ void Application::Start() {
 #ifdef CONFIG_USE_AUDIO_CODEC_ENCODE_OPUS
 #else
     opus_encoder_ = std::make_unique<OpusEncoderWrapper>(16000, 1, OPUS_FRAME_DURATION_MS);
-    if (realtime_chat_enabled_) {
+    if (chat_mode_ == 2) {
         ESP_LOGI(TAG, "Realtime chat enabled, setting opus encoder complexity to 0");
         opus_encoder_->SetComplexity(0);
     } else if (board.GetBoardType() == "ml307") {
@@ -422,7 +425,7 @@ void Application::Start() {
 #ifdef CONFIG_IDF_TARGET_ESP32C3
     }, "audio_loop", 4096 * 4, this, 8, &audio_loop_task_handle_, 0);
 #else
-    }, "audio_loop", 4096 * 4, this, 8, &audio_loop_task_handle_, realtime_chat_enabled_ ? 1 : 0);
+    }, "audio_loop", 4096 * 4, this, 8, &audio_loop_task_handle_, chat_mode_ == 2 ? 1 : 0);
 #endif
 #endif
 
@@ -489,6 +492,8 @@ void Application::Start() {
         return;
     }
 
+    // 启动 1 分钟定时上报 timer
+    StartReportTimer();
 
     // Check for new firmware version or get the MQTT broker address
     CheckNewVersion();
@@ -688,7 +693,7 @@ void Application::Start() {
     bool protocol_started = protocol_->Start();
 
 #if CONFIG_USE_AUDIO_PROCESSOR
-    audio_processor_.Initialize(codec, realtime_chat_enabled_);
+    audio_processor_.Initialize(codec, chat_mode_ == 2);
     audio_processor_.OnOutput([this](std::vector<int16_t>&& data) {
         background_task_->Schedule([this, data = std::move(data)]() mutable {
             if (protocol_->IsAudioChannelBusy()) {
@@ -733,10 +738,10 @@ void Application::Start() {
                 // Set the chat state to wake word detected
                 protocol_->SendWakeWordDetected(wake_word);
                 ESP_LOGI(TAG, "Wake word detected: %s", wake_word.c_str());
-                SetListeningMode(realtime_chat_enabled_ ? kListeningModeRealtime : kListeningModeAutoStop);
+                SetListeningMode(chat_mode_ == 2 ? kListeningModeRealtime : kListeningModeAutoStop);
             } else if (device_state_ == kDeviceStateSpeaking) {
                 AbortSpeaking(kAbortReasonWakeWordDetected);
-                SetListeningMode(realtime_chat_enabled_ ? kListeningModeRealtime : kListeningModeAutoStop);
+                SetListeningMode(chat_mode_ == 2 ? kListeningModeRealtime : kListeningModeAutoStop);
                 auto display = Board::GetInstance().GetDisplay();
                 display->SetChatMessage("assistant", "");
             } else if (device_state_ == kDeviceStateActivating) {
@@ -762,7 +767,7 @@ void Application::Start() {
     // PlayMusic();
     // Enter the main event loop
 
-    report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "设备重启完成", NULL);
+    // report_error(ERROR_TYPE_SYSTEM, ERROR_LEVEL_ERROR, "设备重启完成", NULL);
 
     watchdog.SubscribeTask(xTaskGetCurrentTaskHandle());
     MainEventLoop();
@@ -1002,11 +1007,14 @@ void Application::OnAudioInput() {
         }
     }
 #else
-#if CONFIG_USE_REALTIME_CHAT
-    if (device_state_ == kDeviceStateListening || realtime_chat_is_start_) {
-#else
-    if (device_state_ == kDeviceStateListening) {
-#endif
+
+    bool can_read_audio = false;
+    if (chat_mode_ == 2) {
+        can_read_audio = device_state_ == kDeviceStateListening || realtime_chat_is_start_;
+    } else {
+        can_read_audio = device_state_ == kDeviceStateListening;
+    }
+    if (can_read_audio) {
         int free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         if(free_sram < 10000){
             return;
@@ -1150,9 +1158,9 @@ void Application::SetDeviceState(DeviceState state) {
 #if CONFIG_USE_WAKE_WORD_DETECT
             wake_word_detect_.StartDetection();
 #endif
-#if CONFIG_USE_REALTIME_CHAT
-            realtime_chat_is_start_ = false;
-#endif
+            if (chat_mode_ == 2) {
+                realtime_chat_is_start_ = false;
+            }
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1171,11 +1179,9 @@ void Application::SetDeviceState(DeviceState state) {
             if (!audio_processor_.IsRunning()) {
 #else
             if (true) {
-#if CONFIG_USE_REALTIME_CHAT
-                if(realtime_chat_is_start_){
+                if(chat_mode_ == 2 && realtime_chat_is_start_){
                     break;
                 }
-#endif
 #endif
                 // Send the start listening command
                 protocol_->SendStartListening(listening_mode_);
@@ -1193,9 +1199,9 @@ void Application::SetDeviceState(DeviceState state) {
 #if CONFIG_USE_AUDIO_PROCESSOR
                 audio_processor_.Start();
 #endif
-#if CONFIG_USE_REALTIME_CHAT
-                realtime_chat_is_start_ = true;
-#endif
+                if (chat_mode_ == 2) {
+                    realtime_chat_is_start_ = true;
+                }
             }
             break;
         case kDeviceStateSpeaking:
@@ -1208,9 +1214,9 @@ void Application::SetDeviceState(DeviceState state) {
 #if CONFIG_USE_WAKE_WORD_DETECT
                 wake_word_detect_.StartDetection();
 #endif
-#if CONFIG_USE_REALTIME_CHAT
-                realtime_chat_is_start_ = false;
-#endif
+                if (chat_mode_ == 2) {
+                    realtime_chat_is_start_ = false;
+                }
             }
             ResetDecoder();
             break;
@@ -1276,9 +1282,10 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
     mqtt_client_.sendTraceLog("info", "唤醒词触发");
     ESP_LOGI(TAG, "Wake word invoke: %s", wake_word.c_str());
 
-#ifdef CONFIG_UES_CHAT_MODE_BUTTON
-    return;
-#else
+    // 按钮模式
+    if (chat_mode_ == 0) {
+        return;
+    }
     if (device_state_ == kDeviceStateIdle) {
         
         Schedule([this, wake_word]() {
@@ -1305,7 +1312,6 @@ void Application::WakeWordInvoke(const std::string& wake_word) {
         //     PlaySound(Lang::Sounds::P3_SUCCESS);
         // });
     }
-#endif
 }
 
 bool Application::CanEnterSleepMode() {
@@ -1330,4 +1336,51 @@ void Application::GenerateTraceId() {
     }
     trace_id_[32] = '\0';
     ESP_LOGI(TAG, "Generated trace ID: %s", trace_id_);
+}
+
+void Application::SetChatMode(int mode) {
+    chat_mode_ = mode;
+    Settings settings("wifi", true);
+    settings.SetInt("chat_mode", mode);
+}
+
+void Application::StartReportTimer() {
+    if (report_timer_handle_ != nullptr) {
+        return;
+    }
+    // 先上报一次
+    OnReportTimer();
+    esp_timer_create_args_t report_timer_args = {
+        .callback = [](void* arg) {
+            static_cast<Application*>(arg)->OnReportTimer();
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "report_timer",
+        .skip_unhandled_events = true
+    };
+    esp_timer_create(&report_timer_args, &report_timer_handle_);
+    esp_timer_start_periodic(report_timer_handle_, 60000000); // 1分钟
+}
+
+void Application::OnReportTimer() {
+    // 示例数据，可替换为实际需要上报的内容
+    uint8_t binary_data[17] = {
+        0x00, 0x00, 0x00, 0x03,  // 固定头部
+        0x0b, 0x00, 0x00, 0x93,  // 命令标识
+        0x00, 0x00, 0x00, 0x02,  // 数据长度
+        0x14, 0x90,              // 数据类型
+        0x01,                    // 聊天模式
+        0x1d                     // RSSI (0x27 对应 -61)
+    };
+    
+
+     wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        ESP_LOGI(TAG, "WiFi RSSI: %d dBm", ap_info.rssi);
+        binary_data[14] = chat_mode_;
+        binary_data[15] = 100 - (uint8_t)abs(ap_info.rssi);
+        mqtt_client_.uploadP0Data(binary_data, sizeof(binary_data));
+    }
+
 }
