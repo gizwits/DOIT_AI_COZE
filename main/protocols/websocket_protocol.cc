@@ -106,8 +106,6 @@ void WebsocketProtocol::SendStopListening() {
         return;
     }
 
-    // Reset is_first_packet for next audio stream
-    is_first_packet_ = true;
 
     // 创建事件 ID (使用随机数，确保为正数)
     char event_id[32];
@@ -204,6 +202,9 @@ bool WebsocketProtocol::OpenAudioChannel() {
         return false;
     }
 
+    // 用来标记是不是第一个音频包
+    static bool is_first_packet_ = false;
+
     error_occurred_ = false;
     busy_sending_audio_ = false;  // 重置音频发送标志
     std::string url = std::string("ws://") + room_params_.api_domain + std::string("/v1/chat") + std::string("?bot_id=") + std::string(room_params_.bot_id);
@@ -287,7 +288,21 @@ bool WebsocketProtocol::OpenAudioChannel() {
                     if (ret == 0 && actual_len > 0) {
                         if (on_incoming_audio_ != nullptr) {
                             std::vector<uint8_t> audio_data(audio_data_buffer_.begin(), audio_data_buffer_.begin() + actual_len);
-                            on_incoming_audio_(std::move(audio_data));
+
+                            if (is_first_packet_) {
+                                is_first_packet_ = false;
+
+                                // 先缓存起来，等下一包
+                                audio_data_cache_ = std::move(audio_data);
+                            } else {
+                                if (!audio_data_cache_.empty()) { 
+                                    on_incoming_audio_(std::move(audio_data_cache_));
+                                    audio_data_cache_.clear();
+                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                }
+                                on_incoming_audio_(std::move(audio_data));
+                            }
+
                         }
                     }
                 }
@@ -314,6 +329,8 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 
                 on_incoming_json_(std::string(message_buffer_));
             } else if (event_type == "conversation.chat.in_progress") {
+                is_first_packet_ = true;
+
                 message_cache_.clear();
                 message_buffer_.clear();
                 message_buffer_ = "{";
@@ -322,7 +339,11 @@ bool WebsocketProtocol::OpenAudioChannel() {
                 message_buffer_ += "}";
                 
                 on_incoming_json_(std::string(message_buffer_));
-            } else if (event_type == "conversation.audio.completed") {
+
+
+            } else if (event_type == "conversation.chat.completed" || event_type == "conversation.audio.completed") {
+                is_first_packet_ = false;
+
                 message_buffer_.clear();
                 message_buffer_ = "{";
                 message_buffer_ += "\"type\":\"tts\",";
